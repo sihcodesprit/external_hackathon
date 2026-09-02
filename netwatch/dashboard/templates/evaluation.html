@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Model Evaluation — Counterfactual Cyber World{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Model Evaluation</h1>
+  <p>World Model prediction quality (continuous on next-state vectors) plus
+  baseline classifier comparison. All values are computed on real predictions.</p>
+</div>
+
+{% set me = evals.model_evaluation %}
+{% set we = me.world_model %}
+<div class="grid">
+  <div class="card">
+    <h3>Continuous Prediction Errors</h3>
+    <p>MSE: <strong>{{ we.prediction_metrics.continuous.mse }}</strong></p>
+    <p>RMSE: <strong>{{ we.prediction_metrics.continuous.rmse }}</strong></p>
+    <p>MAE: <strong>{{ we.prediction_metrics.continuous.mae }}</strong></p>
+    <p>Mean cosine: <strong>{{ we.prediction_metrics.continuous.mean_cosine }}</strong></p>
+  </div>
+
+  <div class="card">
+    <h3>Binary Classification (risk threshold)</h3>
+    <p>Accuracy: <strong>{{ we.prediction_metrics.classification.accuracy }}</strong></p>
+    <p>Precision: <strong>{{ we.prediction_metrics.classification.precision }}</strong></p>
+    <p>Recall: <strong>{{ we.prediction_metrics.classification.recall }}</strong></p>
+    <p>F1: <strong>{{ we.prediction_metrics.classification.f1 }}</strong></p>
+    <p>ROC-AUC: <strong>{{ we.prediction_metrics.classification.roc_auc }}</strong></p>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Baseline Classifier Comparison (Flattened Window Features)</h3>
+  <table>
+    <thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>ROC-AUC</th></tr></thead>
+    <tbody>
+    {% for name, b in me.baselines.items() %}
+      <tr>
+        <td>{{ b.model }}</td>
+        <td>{{ b.accuracy if 'accuracy' in b else 'n/a' }}</td>
+        <td>{{ b.precision if 'precision' in b else 'n/a' }}</td>
+        <td>{{ b.recall if 'recall' in b else 'n/a' }}</td>
+        <td>{{ b.f1 if 'f1' in b else 'n/a' }}</td>
+        <td>{{ b.roc_auc if 'roc_auc' in b else 'n/a' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if evals.unseen_attack %}
+<div class="card">
+  <h3>Unseen Attack Generalization</h3>
+  <p>Evaluated on an attack pattern withheld from training (synthetic):</p>
+  <p>MSE: <strong>{{ evals.unseen_attack.continuous.mse }}</strong> &middot;
+     F1: <strong>{{ evals.unseen_attack.classification.f1 }}</strong> &middot;
+     ROC-AUC: <strong>{{ evals.unseen_attack.classification.roc_auc }}</strong></p>
+  <p class="muted">{{ evals.unseen_attack.note }}</p>
+</div>
+{% endif %}
+
+<div class="card muted">
+  <p>Note: All results are on <strong>synthetic</strong> data. Real-dataset
+  results are marked "Not evaluated yet" until genuine labelled datasets are
+  supplied.</p>
+</div>
+{% endblock %}

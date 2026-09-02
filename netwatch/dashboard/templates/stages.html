@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Attack Stage Timeline — Counterfactual Cyber World{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Attack Stage Timeline</h1>
+  <p>Predicted MITRE ATT&CK stages over the forecast horizon (current + K steps).</p>
+</div>
+
+<div class="card">
+  <h3>Stage &amp; Mitre ATT&CK Mapping</h3>
+  <table>
+    <thead>
+      <tr><th>Window</th><th>Stage</th><th>MITRE Tactic</th><th>Technique</th><th>Stage Prob.</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>current</td>
+        <td>{{ forecast.current.stage }}</td>
+        <td>{{ mitre[0].tactic }}</td>
+        <td>{{ mitre[0].technique_id }} {{ mitre[0].technique_name }}</td>
+        <td>{{ '%.2f'|format(forecast.current.stage_probability) }}</td>
+      </tr>
+      {% for step, m in zip(forecast.future, mitre[1:]) %}
+      <tr>
+        <td>t+{{ step.step }}</td>
+        <td>{{ step.stage }}</td>
+        <td>{{ m.tactic }}</td>
+        <td>{{ m.technique_id }} {{ m.technique_name }}</td>
+        <td>{{ '%.2f'|format(step.stage_probability) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Predicted Attack Graph — Counterfactual Cyber World{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Predicted Attack Graph</h1>
+  <p>Directed transitions between predicted MITRE stages with edge confidence.</p>
+</div>
+<div class="card">
+  <canvas id="graphCanvas" height="220"></canvas>
+  <div id="graphLegend"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const graphData = {{ graph_json|tojson }};
+  fetch('/api/graph').then(r => r.json()).then(g => {
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width = canvas.clientWidth || 900;
+    const H = canvas.height = 420;
+    const nodes = g.nodes;
+    const edges = g.edges;
+    // simple layered layout by step
+    const pos = {};
+    nodes.forEach((n, i) => {
+      pos[n.id] = {
+        x: i === 0 ? 60 : 60 + i * ((W - 120) / Math.max(nodes.length - 1, 1)),
+        y: H / 2,
+      };
+    });
+    ctx.clearRect(0, 0, W, H);
+    edges.forEach(e => {
+      const s = pos[e.source], t = pos[e.target];
+      if (!s || !t) return;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(t.x, t.y);
+      ctx.strokeStyle = 'rgba(52,152,219,' + Math.min(e.weight + 0.2, 1) + ')';
+      ctx.lineWidth = 1 + e.weight * 4;
+      ctx.stroke();
+    });
+    nodes.forEach(n => {
+      const p = pos[n.id];
+      const radius = 34;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      const hue = n.severity * 18;
+      ctx.fillStyle = `hsl(${hue},70%,50%)`;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(n.label, p.x, p.y + 3);
+    });
+  });
+</script>
+{% endblock %}

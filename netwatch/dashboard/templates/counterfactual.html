@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Counterfactual Simulation — Counterfactual Cyber World{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Counterfactual Defensive Simulation</h1>
+  <p>What-if analysis — each defensive action is simulated by feeding a modified
+  state through the world model. Resulting risk is the model's actual forecast.</p>
+</div>
+
+<div class="card">
+  <h3>Recommended Action</h3>
+  <div class="stage-badge action">{{ simulation.recommendation.recommended_label }}</div>
+  <p>{{ simulation.recommendation.reason }}</p>
+  <p class="muted">
+    Baseline risk: {{ '%.0f'|format(simulation.recommendation.baseline_risk*100) }}%
+    &rarr; After action: {{ '%.0f'|format(simulation.recommendation.counterfactual_risk*100) }}%
+  </p>
+</div>
+
+<div class="card">
+  <h3>All Simulated Actions</h3>
+  <table>
+    <thead><tr><th>Action</th><th>Final Risk</th><th>Peak Risk</th><th>Description</th></tr></thead>
+    <tbody>
+    {% for aid, r in simulation.results.items() %}
+      <tr>
+        <td>{{ r.label }}</td>
+        <td>{{ '%.0f'|format(r.final_risk*100) }}%</td>
+        <td>{{ '%.0f'|format(r.peak_risk*100) }}%</td>
+        <td class="muted">{{ r.description }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <canvas id="cfChart" height="120"></canvas>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  fetch('/api/counterfactual').then(r => r.json()).then(data => {
+    const labels = Object.keys(data.results).map(k => data.results[k].label);
+    const finals = Object.keys(data.results).map(k => data.results[k].final_risk);
+    const peaks = Object.keys(data.results).map(k => data.results[k].peak_risk);
+    new Chart(document.getElementById('cfChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Final Risk', data: finals, backgroundColor: 'rgba(231,76,60,0.7)' },
+          { label: 'Peak Risk', data: peaks, backgroundColor: 'rgba(52,152,219,0.7)' },
+        ],
+      },
+      options: { scales: { y: { beginAtZero: true, max: 1 } } },
+    });
+  });
+</script>
+{% endblock %}

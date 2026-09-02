@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Counterfactual Cyber World{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Live Risk Dashboard</h1>
+  <p>Current network-state risk and recommended defensive posture from the world model.</p>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>Current State Risk</h3>
+    <div class="risk-gauge" style="--risk: {{ '%.2f'|format(current.risk) }};">
+      <span class="gauge-value">{{ '%.0f'|format(current.risk * 100) }}%</span>
+    </div>
+    <p class="muted">Predicted attack probability from the learned risk head.</p>
+  </div>
+
+  <div class="card">
+    <h3>Current Attack Stage</h3>
+    <div class="stage-badge">{{ current.stage }}</div>
+    <p class="muted">Predicted MITRE stage for the current window.</p>
+  </div>
+
+  <div class="card">
+    <h3>Recommended Defensive Action</h3>
+    <div class="stage-badge action">{{ recommendation.recommended_label }}</div>
+    <p class="muted">{{ recommendation.reason }}</p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const riskEl = document.querySelector('.risk-gauge');
+  if (riskEl) {
+    const risk = parseFloat(riskEl.style.getPropertyValue('--risk'));
+    riskEl.style.setProperty('--hue', (90 - risk * 90));
+  }
+</script>
+{% endblock %}

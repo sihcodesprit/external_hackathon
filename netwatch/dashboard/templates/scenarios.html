@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Scenario Explorer — Counterfactual Cyber World{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Scenario / Data Explorer</h1>
+  <p>Run ad-hoc counterfactual what-if simulations over the live world model.</p>
+</div>
+
+<div class="card">
+  <h3>New Simulation</h3>
+  <label>Horizon (K steps): <input id="k" type="number" value="5" min="1" max="10"></label>
+  <label>Traces for context window: <input id="n_traces" type="number" value="10" min="5" max="60"></label>
+  <label>Defensive actions (comma-separated, or blank = all): <input id="actions" type="text" placeholder="no_action, block_source"></label>
+  <button id="runBtn">Run Simulation</button>
+</div>
+
+<div class="card">
+  <h3>Results</h3>
+  <pre id="results" class="results">No simulation run yet.</pre>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.getElementById('runBtn').addEventListener('click', async () => {
+    const body = {
+      k: parseInt(document.getElementById('k').value) || 5,
+      n_traces: parseInt(document.getElementById('n_traces').value) || 10,
+      actions: document.getElementById('actions').value.split(',').map(s => s.trim()).filter(Boolean) || null,
+    };
+    const res = await fetch('/api/scenario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    document.getElementById('results').textContent = JSON.stringify(data, null, 2);
+  });
+</script>
+{% endblock %}
