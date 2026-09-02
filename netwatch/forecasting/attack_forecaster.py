@@ -19,9 +19,9 @@ from typing import Dict, List, Optional
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 
-from main.netwatch.features.network_state import NetworkState
-from main.netwatch.forecasting.stage_predictor import StagePredictor
-from main.netwatch.models.base_model import WorldModel
+from netwatch.features.network_state import NetworkState
+from netwatch.forecasting.stage_predictor import StagePredictor
+from netwatch.models.base_model import WorldModel
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ class AttackForecaster:
                 "supporting_features": stage["supporting_features"],
             })
 
-        from main.netwatch.forecasting.confidence import assign_confidence
+        from netwatch.forecasting.confidence import assign_confidence
         assign_confidence(steps)
 
         return {

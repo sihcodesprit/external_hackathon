@@ -24,7 +24,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from main.netwatch.models.base_model import WorldModel
+from netwatch.models.base_model import WorldModel
 
 logger = logging.getLogger(__name__)
 

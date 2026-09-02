@@ -4,6 +4,9 @@ This guide covers installation, the quick-start, and how to run the offline
 World Model dashboard. It replaces the earlier detection/monitoring setup that
 was removed during the refactor (see `REMOVED_COMPONENTS.md`).
 
+> A printable step-by-step guide is also available at `docs/HOW_TO_RUN.pdf`
+> (regenerate with `python make_howto_pdf.py`).
+
 ---
 
 ## 1. Prerequisites

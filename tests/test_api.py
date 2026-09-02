@@ -6,7 +6,7 @@ share that cached pipeline and stay fast after the first call.
 
 import pytest
 
-from main.netwatch.dashboard.app import app
+from netwatch.dashboard.app import app
 
 PAGE_ROUTES = [
     "/dashboard", "/radar", "/graph", "/counterfactual",

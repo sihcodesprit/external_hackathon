@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from main.netwatch.config import FEATURE_COLUMNS, WINDOW_SECONDS, WINDOW_STEP_SECONDS
-from main.netwatch.ingestion.parser import PacketRecord
+from netwatch.config import FEATURE_COLUMNS, WINDOW_SECONDS, WINDOW_STEP_SECONDS
+from netwatch.ingestion.parser import PacketRecord
 
 # Canonical feature vector keys (order matters for the model)
 FLOW_FEATURES = ["bytes", "packets"]

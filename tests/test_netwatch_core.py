@@ -6,23 +6,23 @@ Kept fast: tiny traces, few training epochs.
 import numpy as np
 import pytest
 
-from main.netwatch.config import FEATURE_COLUMNS
-from main.netwatch.ingestion.synthetic import generate_trace
-from main.netwatch.features.network_state import StateBuilder
-from main.netwatch.features.sequences import (
+from netwatch.config import FEATURE_COLUMNS
+from netwatch.ingestion.synthetic import generate_trace
+from netwatch.features.network_state import StateBuilder
+from netwatch.features.sequences import (
     StateNormalizer,
     assign_labels_and_stages,
     build_sequences,
     temporal_split,
 )
-from main.netwatch.forecasting.attack_forecaster import AttackForecaster
-from main.netwatch.counterfactual.simulator import CounterfactualEngine
-from main.netwatch.models.trainer import WorldModelTrainer
+from netwatch.forecasting.attack_forecaster import AttackForecaster
+from netwatch.counterfactual.simulator import CounterfactualEngine
+from netwatch.models.trainer import WorldModelTrainer
 
 
 @pytest.fixture()
 def states():
-    from main.netwatch.pipeline import Pipeline
+    from netwatch.pipeline import Pipeline
     pipe = Pipeline()
     pipe.load_data(n_traces=3, seed=7, duration_minutes=90)
     return pipe.states
@@ -119,7 +119,7 @@ def test_counterfactual_meaningful(states):
 
 
 def test_dashboard_app_routes():
-    from main.netwatch.dashboard.app import app
+    from netwatch.dashboard.app import app
     client = app.test_client()
     for path in ("/dashboard", "/radar", "/graph", "/counterfactual",
                  "/stages", "/explainability", "/evaluation", "/scenarios"):

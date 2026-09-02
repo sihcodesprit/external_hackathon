@@ -24,7 +24,7 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from main.netwatch.config import (
+from netwatch.config import (
     DEFAULT_ACTIONS,
     FEATURE_COLUMNS,
     K_STEP_HORIZON,
@@ -36,10 +36,10 @@ from main.netwatch.config import (
     WORLD_MODEL_TYPE,
     ensure_dirs,
 )
-from main.netwatch.counterfactual.simulator import CounterfactualEngine
-from main.netwatch.explainability.shap_explainer import ShapExplainer
-from main.netwatch.features.network_state import StateBuilder
-from main.netwatch.features.sequences import (
+from netwatch.counterfactual.simulator import CounterfactualEngine
+from netwatch.explainability.shap_explainer import ShapExplainer
+from netwatch.features.network_state import StateBuilder
+from netwatch.features.sequences import (
     StateNormalizer,
     assign_labels_and_stages,
     build_sequences,
@@ -47,11 +47,11 @@ from main.netwatch.features.sequences import (
     split_by_group,
     temporal_split,
 )
-from main.netwatch.forecasting.attack_forecaster import AttackForecaster
-from main.netwatch.forecasting.stage_predictor import StagePredictor
-from main.netwatch.ingestion.synthetic import generate_trace
-from main.netwatch.models.trainer import WorldModelTrainer
-from main.netwatch.mitre.attack_mapper import AttackMapper
+from netwatch.forecasting.attack_forecaster import AttackForecaster
+from netwatch.forecasting.stage_predictor import StagePredictor
+from netwatch.ingestion.synthetic import generate_trace
+from netwatch.models.trainer import WorldModelTrainer
+from netwatch.mitre.attack_mapper import AttackMapper
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class Pipeline:
             raise RuntimeError("Not enough states to build training sequences")
 
         # Binary labels aligned with the sequence rows
-        from main.netwatch.features.sequences import build_seq_labels
+        from netwatch.features.sequences import build_seq_labels
         bin_train = build_seq_labels(train_states)
         bin_val = build_seq_labels(val_states)
 
@@ -161,8 +161,8 @@ class Pipeline:
     # ── III. evaluate ──────────────────────────────────────
     def evaluate(self, include_baselines: bool = True,
                  include_unseen: bool = True) -> Dict:
-        from main.netwatch.evaluation.baselines import ModelEvaluator
-        from main.netwatch.evaluation.unseen_attack import UnseenAttackTest
+        from netwatch.evaluation.baselines import ModelEvaluator
+        from netwatch.evaluation.unseen_attack import UnseenAttackTest
 
         evaluator = ModelEvaluator(self.trainer, self.normalizer)
         # build a validation/test evaluation using the preserved splits
@@ -221,7 +221,7 @@ class Pipeline:
         forecast = self.attack_forecaster.forecast(history, k=k)
 
         # predictive attack graph
-        from main.netwatch.graph.predictive_attack_graph import build_predictive_graph
+        from netwatch.graph.predictive_attack_graph import build_predictive_graph
         graph = build_predictive_graph(forecast)
 
         # attach SHAP explanations to each forecast step
@@ -254,7 +254,7 @@ class Pipeline:
 
     # ── persistence ────────────────────────────────────────
     def save_report(self) -> str:
-        from main.netwatch.config import REPORTS_DIR
+        from netwatch.config import REPORTS_DIR
         path = REPORTS_DIR / f"pipeline_report_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         path.write_text(json.dumps(self.results, default=str, indent=2))
         return str(path)

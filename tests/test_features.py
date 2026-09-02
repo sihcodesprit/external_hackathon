@@ -4,14 +4,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from main.netwatch.config import FEATURE_COLUMNS
-from main.netwatch.features.network_state import (
+from netwatch.config import FEATURE_COLUMNS
+from netwatch.features.network_state import (
     NetworkState,
     StateBuilder,
     compute_window_features,
     port_entropy,
 )
-from main.netwatch.ingestion.parser import PacketRecord
+from netwatch.ingestion.parser import PacketRecord
 
 
 def _ts(base, sec):

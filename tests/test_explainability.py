@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from main.netwatch.config import FEATURE_COLUMNS
-from main.netwatch.explainability.shap_explainer import ShapExplainer
+from netwatch.config import FEATURE_COLUMNS
+from netwatch.explainability.shap_explainer import ShapExplainer
 
 
 def test_fallback_explains_without_model():

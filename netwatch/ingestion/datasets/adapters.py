@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import List
 
-from main.netwatch.ingestion.parser import PacketRecord, normalize_packet_dict
+from netwatch.ingestion.parser import PacketRecord, normalize_packet_dict
 
 logger = logging.getLogger(__name__)
 

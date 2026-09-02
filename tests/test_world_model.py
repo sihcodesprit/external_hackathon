@@ -7,9 +7,9 @@ the interface/error paths (trained on tiny sequences).
 import numpy as np
 import pytest
 
-from main.netwatch.config import FEATURE_COLUMNS
-from main.netwatch.models.base_model import WorldModelFactory
-from main.netwatch.models.lstm_world_model import LSTMWorldModel
+from netwatch.config import FEATURE_COLUMNS
+from netwatch.models.base_model import WorldModelFactory
+from netwatch.models.lstm_world_model import LSTMWorldModel
 
 
 @pytest.fixture()

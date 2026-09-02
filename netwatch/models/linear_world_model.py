@@ -7,7 +7,7 @@ import logging
 
 import numpy as np
 
-from main.netwatch.models.base_model import WorldModel
+from netwatch.models.base_model import WorldModel
 
 logger = logging.getLogger(__name__)
 

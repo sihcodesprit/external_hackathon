@@ -62,9 +62,9 @@ class WorldModelFactory:
     @staticmethod
     def create(model_type: str, n_features: int, **kwargs) -> "WorldModel":
         if model_type == "lstm":
-            from main.netwatch.models.lstm_world_model import LSTMWorldModel
+            from netwatch.models.lstm_world_model import LSTMWorldModel
             return LSTMWorldModel(n_features=n_features, **kwargs)
         if model_type == "linear":
-            from main.netwatch.models.linear_world_model import LinearWorldModel
+            from netwatch.models.linear_world_model import LinearWorldModel
             return LinearWorldModel(n_features=n_features, **kwargs)
         raise ValueError(f"Unknown world model type: {model_type}")

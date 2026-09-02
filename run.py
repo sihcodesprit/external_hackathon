@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_pipeline():
-    from main.netwatch.pipeline import Pipeline
+    from netwatch.pipeline import Pipeline
 
     pipe = Pipeline()
     info = pipe.load_data(n_traces=4, seed=42)
@@ -58,7 +58,7 @@ def start_server(port: int, with_pipeline: bool = True):
             run_pipeline()
         except Exception as exc:  # dashboard will (re)train lazily if needed
             logger.warning("Pre-run pipeline failed (dashboard will retry): %s", exc)
-    from main.netwatch.dashboard.app import app
+    from netwatch.dashboard.app import app
 
     logger.info("Starting Counterfactual Cyber World dashboard at http://localhost:%s", port)
     app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG", "0") == "1")

@@ -198,6 +198,8 @@ and dashboard routes.
 - `PROJECT_AUDIT.md` — pre-refactor audit
 - `REMOVED_COMPONENTS.md` — what was removed and why
 - `FINAL_AUDIT.md` — PS-requirement compliance checklist
+- `docs/HOW_TO_RUN.pdf` — step-by-step **How to Run** guide (regenerate with
+  `python make_howto_pdf.py`)
 
 ---
 

@@ -19,8 +19,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from main.netwatch.counterfactual.defensive_actions import ACTIONS
-from main.netwatch.models.base_model import WorldModel
+from netwatch.counterfactual.defensive_actions import ACTIONS
+from netwatch.models.base_model import WorldModel
 
 logger = logging.getLogger(__name__)
 

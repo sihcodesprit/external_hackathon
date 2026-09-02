@@ -20,8 +20,8 @@ import logging
 
 from flask import Flask, jsonify, render_template, request
 
-from main.netwatch import __version__
-from main.netwatch.pipeline import Pipeline
+from netwatch import __version__
+from netwatch.pipeline import Pipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ def create_app():
         pipe = _build_pipeline()
         # Re-simulate counterfactual on demand with the cached world model
         import numpy as np  # noqa
-        from main.netwatch.counterfactual.simulator import CounterfactualEngine
+        from netwatch.counterfactual.simulator import CounterfactualEngine
         history = pipe.states[-10:]
         engine = CounterfactualEngine(pipe.trainer.model,
                                       pipe.attack_forecaster,

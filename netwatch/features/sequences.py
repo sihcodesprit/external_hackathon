@@ -20,8 +20,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from main.netwatch.config import FEATURE_COLUMNS, SEQUENCE_LENGTH
-from main.netwatch.features.network_state import NetworkState
+from netwatch.config import FEATURE_COLUMNS, SEQUENCE_LENGTH
+from netwatch.features.network_state import NetworkState
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def assign_labels_and_stages(
 
     attack_sessions: optional dict mapping src_ip -> stage for labelled traces.
     """
-    from main.netwatch.forecasting.stage_predictor import heuristic_stage
+    from netwatch.forecasting.stage_predictor import heuristic_stage
 
     for s in states:
         f = s.features

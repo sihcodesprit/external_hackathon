@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
-from main.netwatch.ingestion.parser import PacketRecord
+from netwatch.ingestion.parser import PacketRecord
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ def generate_trace(
     Returns a flat list of PacketRecords (each tagged with ground-truth
     `label` and `stage`).
     """
-    from main.netwatch.config import WINDOW_SECONDS
+    from netwatch.config import WINDOW_SECONDS
 
     rng = random.Random(random_seed)
     bg = datetime.now(UTC) + timedelta(minutes=time_offset_minutes)
@@ -194,7 +194,7 @@ def generate_trace(
 
 
 def save_records(records: List[PacketRecord], path: Path):
-    from main.netwatch.ingestion.parser import iter_records
+    from netwatch.ingestion.parser import iter_records
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:

@@ -8,15 +8,15 @@ discounts.
 import numpy as np
 import pytest
 
-from main.netwatch.config import FEATURE_COLUMNS
-from main.netwatch.counterfactual.defensive_actions import (
+from netwatch.config import FEATURE_COLUMNS
+from netwatch.counterfactual.defensive_actions import (
     ACTIONS,
     available_actions,
     get_action,
 )
-from main.netwatch.counterfactual.simulator import CounterfactualEngine
-from main.netwatch.forecasting.attack_forecaster import AttackForecaster
-from main.netwatch.models.base_model import WorldModelFactory
+from netwatch.counterfactual.simulator import CounterfactualEngine
+from netwatch.forecasting.attack_forecaster import AttackForecaster
+from netwatch.models.base_model import WorldModelFactory
 
 
 def test_all_actions_defined():
@@ -61,7 +61,7 @@ def _build_engine():
     model = WorldModelFactory.create("linear", n_features=n)
     model.fit(X, Y)
 
-    from main.netwatch.features.network_state import NetworkState
+    from netwatch.features.network_state import NetworkState
     class _Norm:
         mean, std = [0.0] * n, [1.0] * n
         def transform(self, s):

@@ -13,7 +13,7 @@ from typing import Dict, List
 
 import numpy as np
 
-from main.netwatch.config import FEATURE_COLUMNS
+from netwatch.config import FEATURE_COLUMNS
 
 logger = logging.getLogger(__name__)
 

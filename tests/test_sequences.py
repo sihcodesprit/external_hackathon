@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from main.netwatch.features.network_state import NetworkState
-from main.netwatch.features.sequences import (
+from netwatch.features.network_state import NetworkState
+from netwatch.features.sequences import (
     StateNormalizer,
     assign_labels_and_stages,
     build_seq_labels,
@@ -12,7 +12,7 @@ from main.netwatch.features.sequences import (
     split_by_group,
     temporal_split,
 )
-from main.netwatch.ingestion.synthetic import generate_trace
+from netwatch.ingestion.synthetic import generate_trace
 
 
 def _baseline_states(n=20):
@@ -33,7 +33,7 @@ def _baseline_states(n=20):
 
 @pytest.fixture()
 def norm_states():
-    from main.netwatch.pipeline import Pipeline
+    from netwatch.pipeline import Pipeline
     pipe = Pipeline()
     pipe.load_data(n_traces=2, seed=7, duration_minutes=60)
     return pipe.states

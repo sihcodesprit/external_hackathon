@@ -2,7 +2,7 @@
 
 import pytest
 
-from main.netwatch.mitre.attack_mapper import AttackMapper, STAGE_TO_MITRE
+from netwatch.mitre.attack_mapper import AttackMapper, STAGE_TO_MITRE
 
 
 def test_known_stages_map():

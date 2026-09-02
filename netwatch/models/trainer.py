@@ -7,8 +7,8 @@ Encapsulates the training loop so the pipeline and dashboard can reuse it.
 import logging
 from typing import Dict, Optional
 
-from main.netwatch.config import BATCH_SIZE, NUM_EPOCHS, TRAIN_VAL_SPLIT
-from main.netwatch.models.base_model import WorldModel, WorldModelFactory
+from netwatch.config import BATCH_SIZE, NUM_EPOCHS, TRAIN_VAL_SPLIT
+from netwatch.models.base_model import WorldModel, WorldModelFactory
 
 logger = logging.getLogger(__name__)
 

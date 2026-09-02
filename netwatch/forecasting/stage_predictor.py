@@ -13,7 +13,7 @@ states return the 'benign' default with a low probability.
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from main.netwatch.models.baselines.benchmark import build_classifier
+from netwatch.models.baselines.benchmark import build_classifier
 
 logger = logging.getLogger(__name__)
 

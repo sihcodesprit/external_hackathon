@@ -14,8 +14,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from main.netwatch.evaluation.metrics import evaluate_state_predictions
-from main.netwatch.models.trainer import WorldModelTrainer
+from netwatch.evaluation.metrics import evaluate_state_predictions
+from netwatch.models.trainer import WorldModelTrainer
 
 logger = logging.getLogger(__name__)
 

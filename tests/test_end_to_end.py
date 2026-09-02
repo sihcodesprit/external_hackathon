@@ -13,8 +13,8 @@ journey runs in seconds while still exercising every stage of the pipeline.
 
 import pytest
 
-import main.netwatch.pipeline as pipeline_mod
-from main.netwatch.pipeline import Pipeline
+import netwatch.pipeline as pipeline_mod
+from netwatch.pipeline import Pipeline
 
 
 @pytest.fixture()
