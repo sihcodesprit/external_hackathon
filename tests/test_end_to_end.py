@@ -77,9 +77,9 @@ def test_full_pipeline_end_to_end(pipe):
 def test_save_report_and_reload_linear(tmp_path, pipe):
     pipe.train()
     # save/load of the (linear) world model must round-trip
-    model_path = tmp_path / "model.pkl"
+    model_path = tmp_path / "model.json"
     pipe.trainer.save(str(model_path))
-    import pickle
+    import json
     assert model_path.exists()
-    with open(model_path, "rb") as f:
-        assert pickle.load(f)["n_features"] > 0
+    with open(model_path, "r") as f:
+        assert json.load(f)["n_features"] > 0

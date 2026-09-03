@@ -14,8 +14,8 @@ Also builds a label (attack/benign) per state and per (+1) target for the
 baseline classifiers and stage predictor.
 """
 
+import json
 import logging
-import pickle
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -53,13 +53,13 @@ class StateNormalizer:
         return (vec - np.asarray(self.mean)) / np.asarray(self.std)
 
     def save(self, path):
-        with open(path, "wb") as f:
-            pickle.dump({"mean": self.mean, "std": self.std}, f)
+        with open(path, "w") as f:
+            json.dump({"mean": self.mean, "std": self.std}, f)
 
     @classmethod
     def load(cls, path) -> "StateNormalizer":
-        with open(path, "rb") as f:
-            data = pickle.load(f)
+        with open(path, "r") as f:
+            data = json.load(f)
         n = cls()
         n.mean = data["mean"]
         n.std = data["std"]

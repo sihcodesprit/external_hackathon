@@ -56,20 +56,26 @@ class LinearWorldModel(WorldModel):
 
     def save(self, path: str):
         import os
-        import pickle
+        import json
+        import numpy as np
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "wb") as f:
-            pickle.dump({"W": self.W, "n_features": self.n_features,
-                         "sequence_length": self.sequence_length}, f)
+        data = {
+            "W": self.W.tolist() if self.W is not None else None,
+            "n_features": self.n_features,
+            "sequence_length": self.sequence_length
+        }
+        with open(path, "w") as f:
+            json.dump(data, f)
 
     def load(self, path: str) -> bool:
         import os
-        import pickle
+        import json
+        import numpy as np
         if not os.path.exists(path):
             return False
-        with open(path, "rb") as f:
-            d = pickle.load(f)
-        self.W = d["W"]
+        with open(path, "r") as f:
+            d = json.load(f)
+        self.W = np.array(d["W"], dtype=np.float64) if d["W"] is not None else None
         self.sequence_length = d["sequence_length"]
         self.is_trained = True
         return True

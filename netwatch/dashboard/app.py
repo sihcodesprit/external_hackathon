@@ -18,9 +18,11 @@ World Model on synthetic data) and caches the results.
 
 import functools
 import logging
+import os
 import tempfile
 import threading
 from pathlib import Path
+from werkzeug.utils import secure_filename
 
 from flask import Flask, jsonify, render_template, request, flash, redirect, url_for
 
@@ -35,6 +37,10 @@ logger = logging.getLogger(__name__)
 # Global pipeline cache
 _pipeline_cache = {}
 _pipeline_lock = threading.Lock()
+
+# Allowed file extensions for upload
+ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".csv", ".jsonl"}
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
 
 def _build_pipeline(force_retrain: bool = False) -> Pipeline:
@@ -58,81 +64,97 @@ def _build_pipeline(force_retrain: bool = False) -> Pipeline:
         return pipe
 
 
+def _allowed_file(filename: str) -> bool:
+    """Check if file extension is allowed."""
+    return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
+
+
 def _process_uploaded_file(file, file_type: str) -> dict:
     """Process an uploaded PCAP or CSV file and run forecasting."""
     try:
-        # Save to temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_type}") as tmp:
+        # Validate filename
+        if not file or not file.filename:
+            return {"error": "No file selected"}
+        
+        # Secure the filename
+        filename = secure_filename(file.filename)
+        if not _allowed_file(filename):
+            return {"error": f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"}
+        
+        # Save to temp file with secure name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp:
             file.save(tmp.name)
             tmp_path = Path(tmp.name)
         
-        # Ingest the file
-        records = ingest(tmp_path, kind=file_type)
-        
-        # Clean up temp file
-        tmp_path.unlink(missing_ok=True)
-        
-        if not records:
-            return {"error": "No valid records found in file"}
-        
-        # Build states
-        from netwatch.features.network_state import StateBuilder
-        builder = StateBuilder(group_by_pair=False)
-        states = builder.build_states(records)
-        
-        if not states:
-            return {"error": "No valid network states could be generated"}
-        
-        # Get or create pipeline
-        pipe = _build_pipeline()
-        
-        # Use the trained model to forecast on new data
-        # Normalize states with existing normalizer
-        norm_states = [pipe.normalizer.transform(s) for s in states]
-        
-        # Take last sequence_length states for forecasting
-        seq_len = pipe.trainer.model.sequence_length or 10
-        if len(norm_states) < seq_len:
-            return {"error": f"Need at least {seq_len} windows, got {len(norm_states)}"}
-        
-        history = norm_states[-seq_len:]
-        
-        # Run forecast
-        forecast = pipe.attack_forecaster.forecast(states[-seq_len:], k=5)
-        
-        # Build graph
-        from netwatch.graph.predictive_attack_graph import build_predictive_graph
-        graph = build_predictive_graph(forecast)
-        
-        # Counterfactual simulation
-        from netwatch.counterfactual.simulator import CounterfactualEngine
-        from netwatch.config import DEFAULT_ACTIONS
-        engine = CounterfactualEngine(
-            pipe.trainer.model, pipe.attack_forecaster, pipe.normalizer
-        )
-        sim = engine.simulate(states[-seq_len:], actions=DEFAULT_ACTIONS, k=5)
-        rec = engine.recommend(sim)
-        
-        # MITRE mapping
-        stages = [forecast["current"]["stage"]] + [st["stage"] for st in forecast["future"]]
-        mitre = pipe.attack_mapper.map_trajectory(stages)
-        
-        # Explanations
-        for step in forecast["future"]:
-            step["explanation"] = pipe.explainer.explain(step["state_vec"], step["features"])
-        forecast["current"]["explanation"] = pipe.explainer.explain(
-            forecast["current"]["state_vec"], forecast["current"]["features"])
-        
-        return {
-            "status": "ok",
-            "n_records": len(records),
-            "n_states": len(states),
-            "forecast": forecast,
-            "graph": graph,
-            "counterfactual": {**sim, "recommendation": rec},
-            "mitre_trajectory": mitre,
-        }
-        
+        try:
+            # Ingest the file
+            records = ingest(tmp_path, kind=file_type)
+            
+            if not records:
+                return {"error": "No valid records found in file"}
+            
+            # Build states
+            from netwatch.features.network_state import StateBuilder
+            builder = StateBuilder(group_by_pair=False)
+            states = builder.build_states(records)
+            
+            if not states:
+                return {"error": "No valid network states could be generated"}
+            
+            # Get or create pipeline
+            pipe = _build_pipeline()
+            
+            # Use the trained model to forecast on new data
+            # Normalize states with existing normalizer
+            norm_states = [pipe.normalizer.transform(s) for s in states]
+            
+            # Take last sequence_length states for forecasting
+            seq_len = pipe.trainer.model.sequence_length or 10
+            if len(norm_states) < seq_len:
+                return {"error": f"Need at least {seq_len} windows, got {len(norm_states)}"}
+            
+            history = norm_states[-seq_len:]
+            
+            # Run forecast
+            forecast = pipe.attack_forecaster.forecast(states[-seq_len:], k=5)
+            
+            # Build graph
+            from netwatch.graph.predictive_attack_graph import build_predictive_graph
+            graph = build_predictive_graph(forecast)
+            
+            # Counterfactual simulation
+            from netwatch.counterfactual.simulator import CounterfactualEngine
+            from netwatch.config import DEFAULT_ACTIONS
+            engine = CounterfactualEngine(
+                pipe.trainer.model, pipe.attack_forecaster, pipe.normalizer
+            )
+            sim = engine.simulate(states[-seq_len:], actions=DEFAULT_ACTIONS, k=5)
+            rec = engine.recommend(sim)
+            
+            # MITRE mapping
+            stages = [forecast["current"]["stage"]] + [st["stage"] for st in forecast["future"]]
+            mitre = pipe.attack_mapper.map_trajectory(stages)
+            
+            # Explanations
+            for step in forecast["future"]:
+                step["explanation"] = pipe.explainer.explain(step["state_vec"], step["features"])
+            forecast["current"]["explanation"] = pipe.explainer.explain(
+                forecast["current"]["state_vec"], forecast["current"]["features"])
+            
+            return {
+                "status": "ok",
+                "n_records": len(records),
+                "n_states": len(states),
+                "forecast": forecast,
+                "graph": graph,
+                "counterfactual": {**sim, "recommendation": rec},
+                "mitre_trajectory": mitre,
+            }
+            
+        finally:
+            # Clean up temp file
+            tmp_path.unlink(missing_ok=True)
+            
     except Exception as e:
         logger.error(f"Error processing uploaded file: {e}")
         return {"error": str(e)}
@@ -141,9 +163,19 @@ def _process_uploaded_file(file, file_type: str) -> dict:
 def create_app():
     app = Flask(__name__)
     app.config["JSON_SORT_KEYS"] = False
-    app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB max upload
+    app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
     app.jinja_env.globals["zip"] = zip
-    app.secret_key = "netwatch-dashboard-secret-key-change-in-production"
+    # Use environment variable for secret key in production
+    app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-production")
+    
+    # Security headers
+    @app.after_request
+    def add_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:;"
+        return response
 
     @app.route("/")
     def index():
@@ -324,4 +356,6 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host=DASHBOARD_HOST, port=DASHBOARD_PORT, debug=DASHBOARD_DEBUG)
+    # Disable debug mode in production
+    debug_mode = DASHBOARD_DEBUG and os.environ.get("FLASK_ENV") != "production"
+    app.run(host=DASHBOARD_HOST, port=DASHBOARD_PORT, debug=debug_mode)
