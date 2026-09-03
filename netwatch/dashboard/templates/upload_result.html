@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Upload Results — Counterfactual Cyber World{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Analysis Results</h1>
+  <p>File: <strong>{{ filename }}</strong> — {{ result.n_records }} records, {{ result.n_states }} network states</p>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>Current Risk</h3>
+    <div class="risk-gauge" style="--risk: {{ '%.2f'|format(result.forecast.current.risk) }};">
+      <span class="gauge-value">{{ '%.0f'|format(result.forecast.current.risk * 100) }}%</span>
+    </div>
+    <p class="muted">Stage: {{ result.forecast.current.stage }}</p>
+  </div>
+
+  <div class="card">
+    <h3>Recommended Action</h3>
+    <div class="stage-badge action">{{ result.counterfactual.recommendation.recommended_label }}</div>
+    <p class="muted">{{ result.counterfactual.recommendation.reason }}</p>
+  </div>
+
+  <div class="card">
+    <h3>5-Step Forecast</h3>
+    <table>
+      <thead><tr><th>Step</th><th>Risk</th><th>Stage</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Current</td>
+          <td>{{ '%.0f'|format(result.forecast.current.risk * 100) }}%</td>
+          <td>{{ result.forecast.current.stage }}</td>
+          <td>{{ '%.0f'|format(result.forecast.current.get('confidence', 0) * 100) }}%</td>
+        </tr>
+        {% for step in result.forecast.future %}
+        <tr>
+          <td>+{{ step.step }}</td>
+          <td>{{ '%.0f'|format(step.risk * 100) }}%</td>
+          <td>{{ step.stage }}</td>
+          <td>{{ '%.0f'|format(step.get('confidence', 0) * 100) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Counterfactual Simulation</h3>
+  <canvas id="cfChart" height="150"></canvas>
+  <table>
+    <thead><tr><th>Action</th><th>Final Risk</th><th>Peak Risk</th><th>Description</th></tr></thead>
+    <tbody>
+    {% for aid, r in result.counterfactual.results.items() %}
+      <tr {% if aid == result.counterfactual.recommendation.recommended_action %}class="recommended"{% endif %}>
+        <td>{{ r.label }}</td>
+        <td>{{ '%.0f'|format(r.final_risk * 100) }}%</td>
+        <td>{{ '%.0f'|format(r.peak_risk * 100) }}%</td>
+        <td class="muted">{{ r.description }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>MITRE ATT&CK Trajectory</h3>
+  <table>
+    <thead><tr><th>Step</th><th>Stage</th><th>Tactic</th><th>Technique</th></tr></thead>
+    <tbody>
+    {% for i, m in enumerate(result.mitre_trajectory) %}
+      <tr>
+        <td>{% if i == 0 %}Current{% else %}+{{ i }}{% endif %}</td>
+        <td>{{ m.stage }}</td>
+        <td>{{ m.tactic }}</td>
+        <td>{{ m.technique_id }}: {{ m.technique_name }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>Top Contributing Features (Current)</h3>
+  <ul>
+  {% for feat in result.forecast.current.explanation.top_features %}
+    <li>{{ feat.feature.replace('_', ' ').title() }} ({{ feat.sign }}{{ feat.contribution }})</li>
+  {% endfor %}
+  </ul>
+</div>
+
+<div class="card">
+  <a href="{{ url_for('upload') }}" class="btn btn-secondary">Analyze Another File</a>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-primary">View Dashboard</a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // Counterfactual chart
+  fetch('/api/counterfactual').then(r => r.json()).then(data => {
+    const labels = Object.keys(data.results).map(k => data.results[k].label);
+    const finals = Object.keys(data.results).map(k => data.results[k].final_risk);
+    const peaks = Object.keys(data.results).map(k => data.results[k].peak_risk);
+    new Chart(document.getElementById('cfChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Final Risk', data: finals, backgroundColor: 'rgba(231,76,60,0.7)' },
+          { label: 'Peak Risk', data: peaks, backgroundColor: 'rgba(52,152,219,0.7)' },
+        ],
+      },
+      options: { 
+        responsive: true,
+        scales: { y: { beginAtZero: true, max: 1, ticks: { callback: v => (v*100).toFixed(0) + '%' } } } 
+      },
+    });
+  });
+</script>
+{% endblock %}

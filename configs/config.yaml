@@ -1,0 +1,165 @@
+# Counterfactual Cyber World Model — Configuration
+# All runtime parameters live here. Environment variables can override (see config.py)
+
+# ── Ingestion ────────────────────────────────────────────────
+ingest:
+  default_mode: "synthetic"      # synthetic | pcap | csv
+  pcap_max_packets: 100000       # safety cap for PCAP ingestion
+  csv_chunk_size: 10000          # rows per chunk for large CSVs
+
+# ── Feature Engineering ──────────────────────────────────────
+window_size_seconds: 30          # aggregation window per NetworkState
+window_step_seconds: 10          # step between consecutive windows
+sequence_length: 10              # number of past states fed to world model
+forecast_horizon: 5              # default K-step rollout horizon
+
+# Feature group toggles (all true = full feature set)
+features:
+  traffic: true
+  packet: true
+  flow: true
+  tcp_handshake: true
+  entropy: true
+  temporal: true
+  graph: true
+  markov: true
+  trajectory: true
+  baseline_deviation: true
+  spectral: false                # FFT features (expensive, optional)
+
+# Anonymization
+anonymize_ips: false             # hash IPs in features/logs
+
+# ── World Model ──────────────────────────────────────────────
+model:
+  type: "lstm"                   # lstm | linear | transformer (future)
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 50
+  train_val_split: 0.2
+  device: "auto"                 # auto | cpu | cuda
+
+# ── Forecasting ──────────────────────────────────────────────
+forecasting:
+  k_step_horizon: 5
+  escalation_threshold: 0.5
+  risk_alpha: 0.0                # unused; risk from learned head
+  confidence_weights:
+    magnitude: 0.5
+    stage_prob: 0.3
+    attack_prob: 0.2
+
+# ── Counterfactual ───────────────────────────────────────────
+counterfactual:
+  default_actions:
+    - "no_action"
+    - "block_source"
+    - "block_dest_port"
+    - "isolate_host"
+    - "terminate_flow"
+    - "restrict_path"
+  containment_actions:
+    - "block_source"
+    - "block_dest_port"
+    - "isolate_host"
+    - "terminate_flow"
+    - "restrict_path"
+  effect_window: 3               # how many history windows to neutralize
+  recommendation_metric: "peak_risk"  # peak_risk | final_risk | mean_risk
+
+# ── Explainability ───────────────────────────────────────────
+explainability:
+  enable_shap: true
+  fallback_to_magnitude: true
+  max_display_features: 10
+
+# ── MITRE Mapping ────────────────────────────────────────────
+mitre:
+  stage_to_tactic:
+    Reconnaissance: "Discovery"
+    Initial Access: "Initial Access"
+    Execution: "Execution"
+    Lateral Movement: "Lateral Movement"
+    Command and Control: "Command and Control"
+    Exfiltration: "Exfiltration"
+    Impact: "Impact"
+
+# ── Evaluation ───────────────────────────────────────────────
+evaluation:
+  baseline_models:
+    - "logistic_regression"
+    - "random_forest"
+    - "gradient_boosting"
+  unseen_attack:
+    enabled: true
+    holdout_stages:
+      - "Exfiltration"
+      - "Impact"
+  metrics:
+    continuous:
+      - "mse"
+      - "rmse"
+      - "mae"
+      - "cosine_similarity"
+    classification:
+      - "accuracy"
+      - "precision"
+      - "recall"
+      - "f1"
+      - "roc_auc"
+    forecasting:
+      - "brier_score"
+      - "calibration_error"
+    counterfactual:
+      - "risk_reduction"
+      - "forecast_stability"
+      - "action_ranking_consistency"
+
+# ── Ablation Studies ─────────────────────────────────────────
+ablation:
+  enabled: true
+  feature_sets:
+    - name: "A_traffic_only"
+      features: ["traffic"]
+    - name: "B_traffic_packet"
+      features: ["traffic", "packet"]
+    - name: "C_plus_entropy"
+      features: ["traffic", "packet", "entropy"]
+    - name: "D_plus_temporal"
+      features: ["traffic", "packet", "entropy", "temporal"]
+    - name: "E_plus_graph"
+      features: ["traffic", "packet", "entropy", "temporal", "graph"]
+    - name: "F_all_features"
+      features: ["traffic", "packet", "entropy", "temporal", "graph", 
+                 "tcp_handshake", "markov", "trajectory", "baseline_deviation"]
+  ablation_types:
+    - "graph"
+    - "entropy"
+    - "temporal"
+    - "model_vs_baselines"
+
+# ── Paths ────────────────────────────────────────────────────
+paths:
+  data_dir: "data"
+  generated_dir: "data/generated"
+  model_dir: "data/models"
+  reports_dir: "data/reports"
+  config_dir: "configs"
+  artifacts_dir: "artifacts"
+
+# ── Dashboard ────────────────────────────────────────────────
+dashboard:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+  auto_train_on_start: true
+  demo_mode: true
+
+# ── Logging ──────────────────────────────────────────────────
+logging:
+  level: "INFO"
+  format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+  file: "logs/netwatch.log"

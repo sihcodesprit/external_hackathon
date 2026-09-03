@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from netwatch.config import FEATURE_COLUMNS, SEQUENCE_LENGTH
+from netwatch.config import SEQUENCE_LENGTH, get_feature_columns
 from netwatch.features.network_state import NetworkState
 
 logger = logging.getLogger(__name__)
@@ -37,8 +37,9 @@ class StateNormalizer:
     def fit(self, states: List[NetworkState]):
         X = np.array([s.vector() for s in states], dtype=np.float64)
         if X.shape[0] == 0:
-            self.mean = [0.0] * len(FEATURE_COLUMNS)
-            self.std = [1.0] * len(FEATURE_COLUMNS)
+            cols = get_feature_columns()
+            self.mean = [0.0] * len(cols)
+            self.std = [1.0] * len(cols)
         else:
             self.mean = X.mean(axis=0).tolist()
             self.std = X.std(axis=0).tolist()
@@ -125,8 +126,9 @@ def build_sequences(
         X.append(vecs[i:i + sequence_length])
         Y.append(vecs[i + sequence_length + horizon - 1])
     if not X:
-        return np.zeros((0, sequence_length, len(FEATURE_COLUMNS))), \
-               np.zeros((0, len(FEATURE_COLUMNS)))
+        cols = get_feature_columns()
+        return np.zeros((0, sequence_length, len(cols))), \
+               np.zeros((0, len(cols)))
     return np.asarray(X, dtype=np.float32), np.asarray(Y, dtype=np.float32)
 
 

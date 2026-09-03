@@ -4,13 +4,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from netwatch.config import FEATURE_COLUMNS
+from netwatch.config import get_feature_columns
 from netwatch.features.network_state import (
     NetworkState,
     StateBuilder,
     compute_window_features,
-    port_entropy,
 )
+from netwatch.features.entropy_features import shannon_entropy
 from netwatch.ingestion.parser import PacketRecord
 
 
@@ -19,9 +19,9 @@ def _ts(base, sec):
 
 
 def test_port_entropy_uniform():
-    assert port_entropy([]) == 0.0
-    assert port_entropy([80, 80]) == 0.0
-    assert port_entropy([80, 443, 22, 53]) == pytest.approx(2.0, abs=1e-2)
+    assert shannon_entropy([]) == 0.0
+    assert shannon_entropy([80, 80]) == 0.0
+    assert shannon_entropy([80, 443, 22, 53]) == pytest.approx(2.0, abs=1e-2)
 
 
 def _record(ts, src="1.1.1.1", dst="2.2.2.2", dport=80, flags="A",
@@ -35,8 +35,14 @@ def test_compute_window_features_shape():
     base = datetime.now(UTC)
     pkts = [_record(_ts(base, i)) for i in range(60)]
     feats = compute_window_features(pkts)
-    # every canonical feature must be present
-    for col in FEATURE_COLUMNS:
+    # basic features from compute_window_features
+    expected_basic = {
+        "bytes", "packets", "ttl_mean", "payload_mean", "payload_max",
+        "tcp_window_mean", "packets_per_second", "connection_rate",
+        "unique_dst_ports", "unique_dst_hosts", "syn_rate", "ack_rate",
+        "rst_rate", "syn_ack_ratio", "port_entropy"
+    }
+    for col in expected_basic:
         assert col in feats, col
     assert feats["packets"] == 60
     assert feats["ttl_mean"] == 64.0
@@ -78,7 +84,7 @@ def test_state_vector_uses_feature_columns():
                           group_by_pair=False).build_states(
         [_record(_ts(base, i)) for i in range(60)])
     vec = states[0].vector()
-    assert len(vec) == len(FEATURE_COLUMNS)
+    assert len(vec) == len(get_feature_columns())
 
 
 def test_state_builder_groups_by_pair():

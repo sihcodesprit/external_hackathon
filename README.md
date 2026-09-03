@@ -58,15 +58,15 @@ Counterfactual simulation:
    no_action  block_source  block_dest_port  isolate_host  terminate_flow  restrict_path
         │            │               │               │              │             │
         └────────────┴───────────────┴───────────────┴──────────────┴─────────────┘
-                                   │
-                                   ▼
-        compare predicted futures → recommend the action that minimises future risk
-                                   │
-                                   ▼
-                           SHAP / XAI explanation
-                                   │
-                                   ▼
-                             Flask dashboard
+                                    │
+                                    ▼
+         compare predicted futures → recommend the action that minimises future risk
+                                    │
+                                    ▼
+                            SHAP / XAI explanation
+                                    │
+                                    ▼
+                              Flask dashboard
 ```
 
 ---
@@ -79,6 +79,17 @@ project/
 │   ├── config.py                 ← shared config, feature list, hyperparameters
 │   ├── pipeline.py               ← end-to-end orchestrator
 │   ├── features/                 ← network_state, sequences, flow/packet/temporal
+│   │   ├── network_state.py      ← NetworkState dataclass and StateBuilder
+│   │   ├── feature_registry.py   ← centralized feature configuration
+│   │   ├── packet_features.py    ← packet-level features (TTL, payload, window, IAT)
+│   │   ├── flow_features.py      ← bidirectional flow features
+│   │   ├── tcp_features.py       ← TCP handshake / ghost ratio features
+│   │   ├── entropy_features.py   ← Shannon entropy + temporal trajectories
+│   │   ├── temporal_features.py  ← IAT stats, jitter, periodicity, burstiness, FFT
+│   │   ├── graph_features.py     ← dynamic network graph topology
+│   │   ├── trajectory_features.py← temporal derivatives (delta, acceleration)
+│   │   ├── baseline_features.py  ← benign baseline deviation (z-score, percentile)
+│   │   └── sequences.py          ← temporal sequence dataset construction
 │   ├── models/                   ← base_model, lstm_world_model, linear_world_model,
 │   │                                 trainer, baselines/
 │   ├── forecasting/              ← attack_forecaster, stage_predictor, confidence
@@ -86,14 +97,16 @@ project/
 │   ├── explainability/           ← shap_explainer
 │   ├── mitre/                    ← attack_mapper
 │   ├── graph/                    ← predictive_attack_graph
-│   ├── evaluation/               ← metrics, baselines, unseen_attack
-│   ├── ingestion/                ← parser, synthetic, datasets/adapters
-│   └── dashboard/                ← 8-page Flask dashboard
+│   ├── evaluation/               ← metrics, baselines, unseen_attack, ablation
+│   ├── ingestion/                ← parser, synthetic, datasets/adapters, dataset_levels
+│   └── dashboard/                ← 9-page Flask dashboard
 ├── tests/                        ← pytest (netwatch core + e2e)
 ├── data/                         ← runtime artifacts (gitignored)
-├── configs/
+├── configs/                      ← config.yaml
 ├── docs/                         ← ARCHITECTURE.md, EXPERIMENTS.md, MODEL_CARD.md
 ├── run.py                        ← entry point
+├── forecast.py                   ← CSV/JSONL forecast CLI
+├── forecast_pcap.py              ← PCAP forecast CLI
 ├── requirements.txt
 └── (audit docs) PROJECT_AUDIT.md, REMOVED_COMPONENTS.md, FINAL_AUDIT.md
 ```
@@ -105,7 +118,7 @@ project/
 ### Prerequisites
 
 - Python 3.10+
-- `torch` (CPU build is fine), `scikit-learn`, `flask`, `shap`, `numpy`
+- `torch` (CPU build is fine), `scikit-learn`, `flask`, `shap`, `numpy`, `pyyaml`
 
 ### Setup
 
@@ -133,9 +146,19 @@ python run.py --no-pipeline     # dashboard only (trains lazily on first request
 python run.py --port 8080
 ```
 
+### Forecast from files
+
+```bash
+# From CSV/JSONL flow records
+python forecast.py --input data.csv --horizon 5
+
+# From PCAP packet capture
+python forecast_pcap.py --input capture.pcap --horizon 5
+```
+
 ---
 
-## Dashboard pages
+## Dashboard pages (9)
 
 | Page | Route | Content |
 |---|---|---|
@@ -147,46 +170,80 @@ python run.py --port 8080
 | Explainability | `/explainability` | SHAP / top contributing features |
 | Evaluation | `/evaluation` | World Model vs baseline metrics |
 | Scenarios | `/scenarios` | Ad-hoc scenario / data explorer |
+| **Upload / Demo** | `/upload` / `/demo` | **PCAP/CSV upload, demo mode** |
 
 ---
 
-## Example output
+## Features
 
-For every current state the system produces something like:
+### Network State Representation (S_t)
+- **Traffic features**: packet_rate, byte_rate, flow_rate, connection_rate, total_packets, total_bytes, average_packet_size, packet_size_variance, flow_duration_mean
+- **Packet features**: TTL, TTL variance, TCP window, window variance, IP fragmentation, payload size/distribution, packet size/distribution, IAT mean/variance/max, TCP retransmissions, TCP flags, protocol, ports
+- **Flow features**: bidirectional packet/byte ratios, forward/backward packets/bytes, IAT stats
+- **TCP handshake features**: SYN/SYN-ACK/ACK/RST/FIN counts, ratios (syn_ack_ratio, half_open_ratio), temporal derivatives
+- **Entropy features**: Shannon entropy for ports, protocols, IPs, payload, packet size, TCP flags + temporal trajectories (ΔH, Δ²H)
+- **Temporal features**: IAT mean/std/variance/CV/min/max, autocorrelation, periodicity, burstiness, FFT (optional)
+- **Graph features**: node/edge count, density, degree stats, clustering, centrality, new edges/destinations, temporal deltas
+- **Markov features**: TCP state transition probabilities
+- **Trajectory features**: delta/acceleration for key variables
+- **Baseline deviation**: z-scores, percentiles, absolute deviations from benign baseline
 
-```
-Current Risk: 42%        Stage: Reconnaissance
+### World Model
+- **Architecture**: LSTM (configurable: linear, transformer future)
+- **Input**: sequence_length × n_features
+- **Output**: predicted next state vector
+- **K-step rollout**: recursive future state simulation
 
-+1 window  → Initial Access     — 55%
-+2 windows → Execution          — 67%
-+3 windows → Lateral Movement   — 76%
-+4 windows → Command and Control — 83%
-+5 windows → Exfiltration       — 89%
+### Forecasting
+- **Attack risk**: learned risk head (logistic regression) on predicted states
+- **MITRE ATT&CK stage**: heuristic + classifier fallback
+- **Confidence**: magnitude + stage prob + attack prob
+- **Predictive attack graph**: nodes (stages) + edges (transitions)
 
-Counterfactual defence:
-   No Action      → 89%
-   Block Source   → 24%
-   Isolate Host   → 36%
-   Restrict Port  → 41%
+### Counterfactual Simulation
+- **Actions**: no_action, block_source, block_dest_port, isolate_host, terminate_flow, restrict_path
+- **Mechanism**: modify state → rollout → risk head → compare trajectories
+- **Recommendation**: minimizes predicted peak risk
 
-Recommended Action: Block Source
-Reason: largest reduction in predicted future attack risk.
-```
+### Explainability
+- **SHAP**: on learned risk head
+- **Fallback**: feature magnitude
+- **Temporal**: when features changed
 
-All probabilities are **actual model outputs** produced by feeding each action's
-modified state through the World Model and reading its predicted risk trajectory.
+### Evaluation
+- **Continuous**: MSE, RMSE, MAE, cosine similarity
+- **Classification**: accuracy, precision, recall, F1, ROC-AUC
+- **Forecasting**: Brier score, calibration, precision@horizon
+- **Counterfactual**: risk reduction, stability, action ranking
+- **Baselines**: Logistic Regression, Random Forest, Gradient Boosting
+- **Unseen attack**: generalization to held-out stages
+- **Ablation studies**: feature groups, graph, entropy, temporal, model vs baselines
 
 ---
 
-## Tests
+## CLI Commands
 
+### Training & Dashboard
+```bash
+python run.py                      # train + dashboard
+python run.py --pipeline-only      # train + evaluate + forecast, exit
+python run.py --no-pipeline        # dashboard only
+python run.py --port 8080          # custom port
+```
+
+### Forecasting
+```bash
+# From CSV/JSONL
+python forecast.py --input data.csv --horizon 5 --output result.json
+
+# From PCAP
+python forecast_pcap.py --input capture.pcap --horizon 5 --output result.json
+```
+
+### Tests
 ```bash
 python -m pytest tests/ -v
 ```
-
-Covers feature extraction, state construction, sequence generation, model
-training/prediction, K-step rollout, counterfactual actions, risk comparison,
-and dashboard routes.
 
 ---
 
@@ -195,11 +252,36 @@ and dashboard routes.
 - `docs/ARCHITECTURE.md` — technical architecture
 - `docs/EXPERIMENTS.md` — evaluation methodology and honest results
 - `docs/MODEL_CARD.md` — model details, capabilities, limitations
+- `docs/HOW_TO_RUN.pdf` — step-by-step **How to Run** guide (regenerate with `python make_howto_pdf.py`)
 - `PROJECT_AUDIT.md` — pre-refactor audit
 - `REMOVED_COMPONENTS.md` — what was removed and why
 - `FINAL_AUDIT.md` — PS-requirement compliance checklist
-- `docs/HOW_TO_RUN.pdf` — step-by-step **How to Run** guide (regenerate with
-  `python make_howto_pdf.py`)
+
+---
+
+## Configuration
+
+All configuration in `configs/config.yaml`:
+- Window/sequence/forecast parameters
+- Feature group toggles
+- Model hyperparameters
+- Counterfactual actions
+- Ablation study configs
+- Dashboard settings
+
+Environment variables override defaults (see `.env.example`).
+
+---
+
+## Dataset Adapters
+
+Supported datasets (adapters in `netwatch/ingestion/datasets/adapters.py`):
+- CIC-IDS2017/2018
+- CTU-13
+- UNSW-NB15
+- CICIoT2023
+
+Dataset complexity levels (1-6) in `netwatch/ingestion/dataset_levels.py`.
 
 ---
 

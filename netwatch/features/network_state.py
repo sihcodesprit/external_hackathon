@@ -4,22 +4,30 @@ NetworkState representation.
 Each time window is represented as a structured state vector S_t containing
 flow, packet, and temporal features. States are what the World Model consumes.
 
-The canonical feature vector is defined by config.FEATURE_COLUMNS. Numerical
+The canonical feature vector is defined by the FeatureRegistry. Numerical
 features are normalized during dataset construction; NetworkState itself carries
 raw (unnormalized) values plus the timestamp.
 """
 
-import math
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from netwatch.config import FEATURE_COLUMNS, WINDOW_SECONDS, WINDOW_STEP_SECONDS
+from netwatch.config import (
+    WINDOW_SECONDS, WINDOW_STEP_SECONDS, get_feature_columns, get_feature_registry
+)
 from netwatch.ingestion.parser import PacketRecord
+from netwatch.features.entropy_features import compute_entropy_features
+from netwatch.features.tcp_features import compute_tcp_handshake_features
+from netwatch.features.temporal_features import compute_temporal_features
+from netwatch.features.graph_features import compute_graph_features, DynamicGraph
+from netwatch.features.trajectory_features import compute_trajectory_features, TrajectoryTracker
+from netwatch.features.baseline_features import compute_baseline_features, BaselineTracker
 
-# Canonical feature vector keys (order matters for the model)
+
+# Legacy feature group names for backward compatibility
 FLOW_FEATURES = ["bytes", "packets"]
 PACKET_FEATURES = ["ttl_mean", "payload_mean", "payload_max", "tcp_window_mean"]
 TEMPORAL_FEATURES = [
@@ -37,27 +45,11 @@ def _parse_ts(ts_str: str) -> Optional[datetime]:
         return None
 
 
-def port_entropy(ports: List[int]) -> float:
-    """Shannon entropy of a port distribution — high for random/sweep scans."""
-    if not ports:
-        return 0.0
-    counts: Dict[int, int] = defaultdict(int)
-    for p in ports:
-        counts[p] += 1
-    total = float(len(ports))
-    e = 0.0
-    for c in counts.values():
-        p = c / total
-        e -= p * math.log2(p)
-    return e
-
-
-def compute_window_features(pkts: List[PacketRecord]) -> Dict[str, float]:
-    """Aggregate a list of PacketRecords into a feature vector (unnormalized)."""
+def compute_base_features(pkts: List[PacketRecord]) -> Dict[str, float]:
+    """Compute basic flow, packet, and temporal features (original implementation)."""
     total = len(pkts)
     duration = max(WINDOW_SECONDS, 1.0)
 
-    # Build individual feature lists for statistics
     ttls, payloads, windows = [], [], []
     ports: List[int] = []
     dst_hosts: set = set()
@@ -99,9 +91,49 @@ def compute_window_features(pkts: List[PacketRecord]) -> Dict[str, float]:
         "ack_rate": ack_rate,
         "rst_rate": rst_rate,
         "syn_ack_ratio": syn_ack_ratio,
-        "port_entropy": port_entropy(ports),
+        "port_entropy": _port_entropy(ports),
     }
     return features
+
+
+def _port_entropy(ports: List[int]) -> float:
+    """Shannon entropy of a port distribution."""
+    if not ports:
+        return 0.0
+    counts: Dict[int, int] = defaultdict(int)
+    for p in ports:
+        counts[p] += 1
+    total = float(len(ports))
+    e = 0.0
+    import math
+    for c in counts.values():
+        p = c / total
+        e -= p * math.log2(p) if p > 0 else 0
+    return e
+
+
+def _packet_records_to_dicts(pkts: List[PacketRecord]) -> List[Dict]:
+    """Convert PacketRecord objects to dicts for feature modules."""
+    return [
+        {
+            "timestamp": p.timestamp,
+            "src_ip": p.src_ip,
+            "dst_ip": p.dst_ip,
+            "src_port": p.src_port,
+            "dst_port": p.dst_port,
+            "protocol": p.protocol,
+            "flags": p.flags,
+            "bytes_sent": p.bytes_sent,
+            "packets": p.packets,
+            "ttl": p.ttl,
+            "payload_size": p.payload_size,
+            "tcp_window": p.tcp_window,
+            "duration": p.duration,
+            "label": p.label,
+            "stage": p.stage,
+        }
+        for p in pkts
+    ]
 
 
 @dataclass
@@ -111,11 +143,11 @@ class NetworkState:
     features: Dict[str, float] = field(default_factory=dict)
     src_ip: str = ""
     dst_ip: str = ""
-    label: Optional[int] = None       # optional ground-truth attack indicator
-    stage: Optional[str] = None       # optional ground-truth / predicted MITRE stage
+    label: Optional[int] = None
+    stage: Optional[str] = None
 
     def vector(self, columns: Optional[List[str]] = None) -> List[float]:
-        cols = columns or FEATURE_COLUMNS
+        cols = columns or get_feature_columns()
         return [self.features.get(c, 0.0) for c in cols]
 
     def to_dict(self) -> Dict:
@@ -136,12 +168,22 @@ class StateBuilder:
     sliding a window over time, grouped (optionally) per (src, dst) pair.
     """
 
-    def __init__(self, window_seconds: int = WINDOW_SECONDS,
+    def __init__(self, 
+                 window_seconds: int = WINDOW_SECONDS,
                  window_step: int = WINDOW_STEP_SECONDS,
-                 group_by_pair: bool = True):
+                 group_by_pair: bool = True,
+                 enable_advanced_features: bool = True):
         self.window_seconds = window_seconds
         self.window_step = window_step
         self.group_by_pair = group_by_pair
+        self.enable_advanced_features = enable_advanced_features
+        
+        # State for temporal features
+        self._entropy_history: List[Dict] = []
+        self._handshake_history: List[Dict] = []
+        self._graph_state: Optional[DynamicGraph] = None
+        self._trajectory_tracker: Optional[TrajectoryTracker] = None
+        self._baseline_tracker: Optional[BaselineTracker] = None
 
     def build_states(self, records: List[PacketRecord]) -> List[NetworkState]:
         if not records:
@@ -155,6 +197,14 @@ class StateBuilder:
             groups = {("", ""): records}
 
         states: List[NetworkState] = []
+        
+        # Reset temporal state for new build
+        self._entropy_history = []
+        self._handshake_history = []
+        self._graph_state = None
+        self._trajectory_tracker = None
+        self._baseline_tracker = None
+
         for (src, dst), pkts in groups.items():
             # Keep only packets we can timestamp, sorted ascending.
             timed = []
@@ -169,31 +219,85 @@ class StateBuilder:
             first = timed[0][0]
             last = timed[-1][0]
             win_start = first
-            # Sliding window via two pointers over the sorted packets (O(n)).
             i = 0
             n = len(timed)
+            
+            # Convert to dicts once per group
+            pkt_dicts = _packet_records_to_dicts([p for _, p in timed])
+
             while win_start <= last:
                 win_end = win_start + timedelta(seconds=self.window_seconds)
-                # advance the right pointer
                 while i < n and timed[i][0] < win_end:
                     i += 1
-                # advance the left pointer past windows we've consumed
                 j = i
                 while j > 0 and timed[j - 1][0] >= win_start:
                     j -= 1
+                
                 window_pkts = [timed[k][1] for k in range(j, i)]
+                window_dicts = pkt_dicts[j:i]
+                
                 if window_pkts:
-                    feats = compute_window_features(window_pkts)
-                    # derive ground-truth label/stage from packets in the window
+                    # Compute base features
+                    feats = compute_base_features(window_pkts)
+                    
+                    # Advanced features
+                    if self.enable_advanced_features:
+                        # Entropy features with temporal derivatives
+                        entropy_feats = compute_entropy_features(
+                            window_dicts,
+                            self._entropy_history[-1] if self._entropy_history else None,
+                            self._entropy_history[-2] if len(self._entropy_history) >= 2 else None
+                        )
+                        feats.update(entropy_feats)
+                        self._entropy_history.append(entropy_feats)
+                        
+                        # TCP handshake features
+                        handshake_feats = compute_tcp_handshake_features(
+                            window_dicts,
+                            self._handshake_history[-1] if self._handshake_history else None
+                        )
+                        feats.update(handshake_feats)
+                        self._handshake_history.append(handshake_feats)
+                        
+                        # Temporal/jitter features
+                        temporal_feats = compute_temporal_features(window_dicts)
+                        feats.update(temporal_feats)
+                        
+                        # Graph features
+                        graph_feats, self._graph_state = compute_graph_features(
+                            window_dicts, self._graph_state
+                        )
+                        feats.update(graph_feats)
+                        
+                        # Initialize trackers on first window
+                        if self._trajectory_tracker is None:
+                            self._trajectory_tracker = TrajectoryTracker()
+                        if self._baseline_tracker is None:
+                            self._baseline_tracker = BaselineTracker()
+                        
+                        # Trajectory features
+                        trajectory_feats, self._trajectory_tracker = compute_trajectory_features(
+                            feats, self._trajectory_tracker
+                        )
+                        feats.update(trajectory_feats)
+                        
+                        # Baseline deviation features
+                        is_benign = not any(p.label == 1 for p in window_pkts)
+                        baseline_feats, self._baseline_tracker = compute_baseline_features(
+                            feats, self._baseline_tracker, is_benign=is_benign
+                        )
+                        feats.update(baseline_feats)
+
+                    # Derive ground-truth label/stage
                     attack_count = sum(1 for p in window_pkts if p.label == 1)
                     label = 1 if attack_count >= max(1, int(0.2 * len(window_pkts))) else 0
                     stage = ""
                     if label:
-                        # most common ground-truth stage among attack packets
                         stage = max(
                             [p.stage for p in window_pkts if p.label == 1 and p.stage],
                             default="",
                         )
+
                     states.append(NetworkState(
                         timestamp=win_start.isoformat().replace("+00:00", "Z"),
                         features=feats,
@@ -206,3 +310,11 @@ class StateBuilder:
 
         states.sort(key=lambda s: s.timestamp)
         return states
+
+
+def compute_window_features(pkts: List[PacketRecord]) -> Dict[str, float]:
+    """
+    Legacy function for backward compatibility.
+    Computes base features only.
+    """
+    return compute_base_features(pkts)

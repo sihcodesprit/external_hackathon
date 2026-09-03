@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Upload Traffic Data — Counterfactual Cyber World{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Upload Network Traffic Data</h1>
+  <p>Upload a PCAP, CSV, or JSONL file to analyze with the Counterfactual Cyber World Model.</p>
+</div>
+
+<div class="card">
+  <h3>Upload File</h3>
+  <form method="POST" enctype="multipart/form-data" id="uploadForm">
+    <div class="form-group">
+      <label for="file">Select File</label>
+      <input type="file" name="file" id="file" accept=".pcap,.pcapng,.csv,.jsonl" required>
+      <small class="form-text">Max file size: 100MB. Supported formats: PCAP/PCAPNG, CSV, JSONL</small>
+    </div>
+    
+    <div class="form-group">
+      <label for="file_type">File Type</label>
+      <select name="file_type" id="file_type">
+        <option value="auto">Auto-detect</option>
+        <option value="pcap">PCAP / PCAPNG</option>
+        <option value="csv">CSV (flow records)</option>
+        <option value="jsonl">JSONL (packet records)</option>
+      </select>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Analyze</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Sample Data</h3>
+  <p>Don't have a file? Try the <a href="{{ url_for('demo') }}">Demo Mode</a> to see the system in action with synthetic attack scenarios.</p>
+</div>
+
+<div class="card">
+  <h3>Expected Formats</h3>
+  
+  <h4>PCAP / PCAPNG</h4>
+  <p>Standard packet capture files. The system extracts packet headers, TCP flags, payload sizes, and timing information.</p>
+  
+  <h4>CSV (Flow Records)</h4>
+  <p>Flow-level CSV with columns like: <code>timestamp, src_ip, dst_ip, src_port, dst_port, protocol, bytes, packets, duration, flags</code></p>
+  <p>Supported schemas: CIC-IDS, CTU-13, UNSW-NB15, CICIoT2023, and generic flow formats.</p>
+  
+  <h4>JSONL (Packet Records)</h4>
+  <p>One JSON object per line with fields: <code>timestamp, src_ip, dst_ip, src_port, dst_port, protocol, flags, bytes_sent, packets, ttl, payload_size, tcp_window, duration</code></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Show file name on selection
+  document.getElementById('file').addEventListener('change', function(e) {
+    const fileName = e.target.files[0]?.name || 'No file selected';
+    const label = document.querySelector('label[for="file"]');
+    label.textContent = 'Selected: ' + fileName;
+  });
+</script>
+{% endblock %}
