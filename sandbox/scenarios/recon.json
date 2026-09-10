@@ -1,0 +1,37 @@
+{
+  "name": "recon",
+  "description": "Port scanning and reconnaissance phase — attacker probes network services",
+  "difficulty": "easy",
+  "attack_types": ["PortScan"],
+  "mitre_phases": ["Reconnaissance", "Discovery"],
+  "mitre_tactics": ["TA0043", "TA0007"],
+  "mitre_techniques": [
+    {"id": "T1046", "name": "Network Service Discovery"},
+    {"id": "T1595", "name": "Active Scanning"}
+  ],
+  "duration_minutes": 30,
+  "expected_risk_range": [0.1, 0.4],
+  "traffic_profile": {
+    "background_benign": true,
+    "port_scan": true,
+    "high_connection_rate": true,
+    "syn_flood_light": true
+  },
+  "entities": [
+    {"ip": "198.51.100.50", "type": "EXTERNAL", "role": "attacker"},
+    {"ip": "10.10.10.10", "type": "WEB_SERVER", "role": "target"},
+    {"ip": "10.10.10.20", "type": "WEB_SERVER", "role": "target"},
+    {"ip": "10.10.20.10", "type": "DATABASE", "role": "target"}
+  ],
+  "synthetic_config": {
+    "n_traces": 4,
+    "seed": 100,
+    "duration_minutes": 30,
+    "attack_types": ["PortScan"]
+  },
+  "detection_signatures": [
+    "High SYN rate from single source to multiple ports",
+    "Connection attempts to closed ports (RST responses)",
+    "Sequential port probing pattern"
+  ]
+}

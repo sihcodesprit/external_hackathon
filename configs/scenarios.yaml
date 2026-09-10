@@ -1,0 +1,16 @@
+scenarios:
+  - name: benign
+    description: Normal benign traffic
+    attack_types: []
+  - name: recon
+    description: Port scanning and reconnaissance
+    attack_types: [PortScan]
+  - name: bruteforce
+    description: Brute force login attempts
+    attack_types: [BruteForce]
+  - name: dos
+    description: Denial of service attack
+    attack_types: [DoS]
+  - name: mixed
+    description: Mixed attack scenario
+    attack_types: [PortScan, BruteForce, DoS]

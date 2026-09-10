@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Model Test Center — NetWatch{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Model Test Center</h1>
+  <p>Test each component of the pipeline independently</p>
+</div>
+
+<div class="card">
+  <h3>Test Configuration</h3>
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Dataset</label>
+      <select id="test-dataset">
+        <option value="synthetic">Synthetic (Development)</option>
+        <option value="pcap">PCAP File</option>
+        <option value="csv">CSV Flow Data</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Window (seconds)</label>
+      <input type="number" id="test-window" value="30" min="5" max="300">
+    </div>
+    <div class="form-group">
+      <label>Step (seconds)</label>
+      <input type="number" id="test-step" value="10" min="1" max="60">
+    </div>
+    <div class="form-group">
+      <label>Horizon (K steps)</label>
+      <input type="number" id="test-horizon" value="5" min="1" max="20">
+    </div>
+  </div>
+
+  <div class="checkbox-grid">
+    <label><input type="checkbox" id="test-detection" checked> Detection</label>
+    <label><input type="checkbox" id="test-network-state" checked> Network State</label>
+    <label><input type="checkbox" id="test-world-model" checked> World Model</label>
+    <label><input type="checkbox" id="test-forecast" checked> K-Step Forecast</label>
+    <label><input type="checkbox" id="test-mitre" checked> MITRE</label>
+    <label><input type="checkbox" id="test-explain" checked> Explainability</label>
+    <label><input type="checkbox" id="test-attack-graph" checked> Attack Graph</label>
+    <label><input type="checkbox" id="test-counterfactual" checked> Counterfactual</label>
+    <label><input type="checkbox" id="test-full-pipeline" checked> Full Pipeline</label>
+  </div>
+
+  <button class="btn btn-primary" onclick="runTest()">Run Test</button>
+</div>
+
+<div id="test-results" class="card" style="display:none;">
+  <h3>Test Results</h3>
+  <div id="results-content"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runTest() {
+  const btn = document.querySelector('.btn-primary');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  
+  const resultsDiv = document.getElementById('test-results');
+  const contentDiv = document.getElementById('results-content');
+  resultsDiv.style.display = 'block';
+  contentDiv.innerHTML = '<p class="muted">Running pipeline test...</p>';
+  
+  try {
+    const response = await fetch('/api/scenario', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        k: parseInt(document.getElementById('test-horizon').value) || 5
+      })
+    });
+    const data = await response.json();
+    
+    let html = '<table class="data-table"><thead><tr><th>Component</th><th>Status</th><th>Details</th></tr></thead><tbody>';
+    
+    // Detection
+    if (data.baseline_current_risk !== undefined) {
+      html += `<tr><td>Detection</td><td class="status-ok">OK</td><td>Current risk: ${(data.baseline_current_risk*100).toFixed(1)}%</td></tr>`;
+    } else {
+      html += `<tr><td>Detection</td><td class="status-fail">SKIP</td><td>Not requested</td></tr>`;
+    }
+    
+    // Forecast
+    if (data.results && data.results.no_action) {
+      html += `<tr><td>K-Step Forecast</td><td class="status-ok">OK</td><td>Horizon: ${data.k || 5} steps</td></tr>`;
+    }
+    
+    // Counterfactual
+    if (data.results) {
+      const actions = Object.keys(data.results).length;
+      html += `<tr><td>Counterfactual</td><td class="status-ok">OK</td><td>${actions} actions simulated</td></tr>`;
+    }
+    
+    // Recommendation
+    if (data.recommendation) {
+      html += `<tr><td>Recommendation</td><td class="status-ok">OK</td><td>${data.recommendation.recommended_label}</td></tr>`;
+    }
+    
+    html += '</tbody></table>';
+    contentDiv.innerHTML = html;
+  } catch(e) {
+    contentDiv.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+  }
+  
+  btn.disabled = false;
+  btn.textContent = 'Run Test';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,7 @@
+network:
+  auto_discovery: true
+  max_history: 100
+
+window:
+  size_seconds: 30
+  step_seconds: 10

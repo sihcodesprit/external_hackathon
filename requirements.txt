@@ -1,19 +1,21 @@
 # SIH26153 — AI-Based Network Attack Forecasting (Counterfactual Cyber World Model)
-# Runtime + dev dependencies for the Counterfactual Cyber World Model.
+# Runtime + dev dependencies
 
 # ── Web framework ──────────────────────────────────────────
 flask>=3.0,<4
-gunicorn>=21.0           # WSGI server (deployment)
+gunicorn>=21.0
+werkzeug>=3.0
 
 # ── ML / Data ──────────────────────────────────────────────
 numpy>=1.26
 scikit-learn>=1.4
 torch>=2.1
+pyyaml>=6.0
 
 # ── Explainability ─────────────────────────────────────────
 shap>=0.46
 
-# ── Optional: PCAP ingestion ───────────────────────────────
+# ── PCAP ingestion ────────────────────────────────────────
 # scapy>=2.5   # uncomment to enable PCAP ingestion
 
 # ── Testing ────────────────────────────────────────────────

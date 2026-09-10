@@ -3,28 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Counterfactual Cyber World Model{% endblock %}</title>
+  <title>{% block title %}NetWatch — Cyber World Model{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 <nav class="topnav">
-  <a class="brand" href="/dashboard">Counterfactual Cyber World</a>
+  <a class="brand" href="/dashboard">NetWatch SOC</a>
   <a href="/dashboard">Dashboard</a>
-  <a href="/radar">10-Min Radar</a>
+  <a href="/topology">Topology</a>
+  <a href="/radar">Forecast</a>
   <a href="/graph">Attack Graph</a>
   <a href="/counterfactual">Counterfactual</a>
-  <a href="/stages">Stages</a>
-  <a href="/explainability">Explainability</a>
+  <a href="/stages">MITRE</a>
+  <a href="/explainability">Explain</a>
   <a href="/evaluation">Evaluation</a>
-  <a href="/scenarios">Scenarios</a>
-  <a href="/demo">Demo</a>
+  <a href="/test-center">Test Center</a>
   <a href="/upload">Upload</a>
 </nav>
 <main class="container">
 {% block content %}{% endblock %}
 </main>
 <footer class="footer">
-  Counterfactual Cyber World Model v{{ version }} &middot; LSTM world model &middot; synthetic data
+  NetWatch v{{ version }} &middot; LSTM World Model &middot; <span class="mode-badge">PCAP REPLAY</span>
 </footer>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 {% block scripts %}{% endblock %}

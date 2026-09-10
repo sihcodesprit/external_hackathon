@@ -1,0 +1,47 @@
+{
+  "name": "mixed",
+  "description": "Multi-stage attack: reconnaissance followed by brute force and DoS",
+  "difficulty": "hard",
+  "attack_types": ["PortScan", "BruteForce", "DoS"],
+  "mitre_phases": ["Reconnaissance", "Initial Access", "Execution", "Impact"],
+  "mitre_tactics": ["TA0043", "TA0001", "TA0002", "TA0040"],
+  "mitre_techniques": [
+    {"id": "T1046", "name": "Network Service Discovery"},
+    {"id": "T1110", "name": "Brute Force"},
+    {"id": "T1498", "name": "Network Denial of Service"}
+  ],
+  "duration_minutes": 60,
+  "expected_risk_range": [0.2, 0.9],
+  "traffic_profile": {
+    "background_benign": true,
+    "port_scan_phase": true,
+    "bruteforce_phase": true,
+    "dos_phase": true,
+    "escalating_pattern": true
+  },
+  "entities": [
+    {"ip": "198.51.100.50", "type": "EXTERNAL", "role": "attacker"},
+    {"ip": "203.0.113.60", "type": "EXTERNAL", "role": "attacker_alt"},
+    {"ip": "10.10.10.10", "type": "WEB_SERVER", "role": "target"},
+    {"ip": "10.10.10.20", "type": "WEB_SERVER", "role": "target"},
+    {"ip": "10.10.20.10", "type": "DATABASE", "role": "high_value"},
+    {"ip": "10.10.10.30", "type": "SERVER", "role": "target"}
+  ],
+  "synthetic_config": {
+    "n_traces": 8,
+    "seed": 400,
+    "duration_minutes": 60,
+    "attack_types": ["PortScan", "BruteForce", "DoS"]
+  },
+  "detection_signatures": [
+    "Phase 1: Port scanning (high connection_rate, low bytes)",
+    "Phase 2: Brute force (repeated auth attempts, medium bytes)",
+    "Phase 3: DoS (high bandwidth, sustained flood)",
+    "Progression: recon -> initial_access -> execution -> impact"
+  ],
+  "expected_forecast": {
+    "early_steps": "Risk increasing, stage transitioning from Reconnaissance",
+    "mid_steps": "Risk high, stage in Initial Access / Execution",
+    "late_steps": "Risk critical, stage in Impact"
+  }
+}

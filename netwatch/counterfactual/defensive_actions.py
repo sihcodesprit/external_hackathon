@@ -7,9 +7,11 @@ NO actual network blocking is ever performed — this is decision support.
 
 Each action provides:
     id, label, description, and apply(state_vec, features) -> modified vector
+
+Actions use dynamic feature column lookup instead of hardcoded indices.
 """
 
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -23,24 +25,22 @@ class DefensiveAction:
         self.apply_fn = apply_fn
 
     def apply(self, state_vec: np.ndarray, features: Dict[str, float]) -> np.ndarray:
-        return self.apply_fn(np.asarray(state_vec, dtype=np.float64).copy(),
-                             features)
+        return self.apply_fn(np.asarray(state_vec, dtype=np.float64).copy(), features)
 
 
-def _no_action(vec, feats):
+def _get_idx_map(feature_columns: List[str]) -> Dict[str, int]:
+    """Build a name->index map from the feature column list."""
+    return {name: i for i, name in enumerate(feature_columns)}
+
+
+def _no_action(vec, feats, idx=None):
     return vec
 
 
-def _block_source(vec, feats):
-    # Simulate: source no longer reaches host -> drop connection rate, SYN/RST,
-    # and port activity down to benign baseline (normalized ~0).
+def _block_source(vec, feats, idx=None):
+    """Simulate: source no longer reaches host -> drop traffic features to benign baseline."""
     nv = vec.copy()
-    # indices by feature name (assumed FEATURE_COLUMNS ordering)
-    idx = {name: i for i, name in enumerate(
-        ["bytes", "packets", "ttl_mean", "payload_mean", "payload_max",
-         "tcp_window_mean", "packets_per_second", "connection_rate",
-         "unique_dst_ports", "unique_dst_hosts", "syn_rate", "ack_rate",
-         "rst_rate", "syn_ack_ratio", "port_entropy"])}
+    idx = idx or {}
     for key in ["packets_per_second", "connection_rate", "unique_dst_ports",
                 "unique_dst_hosts", "syn_rate", "ack_rate", "rst_rate",
                 "syn_ack_ratio", "port_entropy", "packets", "bytes"]:
@@ -49,90 +49,109 @@ def _block_source(vec, feats):
     return nv
 
 
-def _block_dest_port(vec, feats):
-    # Simulate: targeted port blocked -> reduce traffic magnitude to benign
+def _block_dest_port(vec, feats, idx=None):
+    """Simulate: targeted port blocked -> partial traffic reduction."""
     nv = vec.copy()
-    idx = {name: i for i, name in enumerate(
-        ["bytes", "packets", "ttl_mean", "payload_mean", "payload_max",
-         "tcp_window_mean", "packets_per_second", "connection_rate",
-         "unique_dst_ports", "unique_dst_hosts", "syn_rate", "ack_rate",
-         "rst_rate", "syn_ack_ratio", "port_entropy"])}
+    idx = idx or {}
     for key in ["packets_per_second", "connection_rate", "unique_dst_ports",
-                "unique_dst_hosts", "syn_rate", "rst_rate", "port_entropy",
-                "packets"]:
-        nv[idx[key]] = nv[idx[key]] * 0.25  # partial reduction
-    nv[idx["bytes"]] = nv[idx["bytes"]] * 0.5
-    nv[idx["payload_mean"]] = nv[idx["payload_mean"]] * 0.7
+                "unique_dst_hosts", "syn_rate", "rst_rate", "port_entropy", "packets"]:
+        if key in idx:
+            nv[idx[key]] = nv[idx[key]] * 0.25
+    if "bytes" in idx:
+        nv[idx["bytes"]] = nv[idx["bytes"]] * 0.5
+    if "payload_mean" in idx:
+        nv[idx["payload_mean"]] = nv[idx["payload_mean"]] * 0.7
     return nv
 
 
-def _isolate_host(vec, feats):
-    # Simulate: isolate the host -> cut all inbound connections (~ block source
-    # but also keep host's own normal traffic).
-    return _block_source(vec, feats)
+def _isolate_host(vec, feats, idx=None):
+    """Simulate: isolate the host -> cut all inbound connections."""
+    return _block_source(vec, feats, idx)
 
 
-def _terminate_flow(vec, feats):
-    # Simulate: terminate the active suspicious flow -> drop current session
+def _terminate_flow(vec, feats, idx=None):
+    """Simulate: terminate the active suspicious flow."""
     nv = vec.copy()
-    idx = {name: i for i, name in enumerate(
-        ["bytes", "packets", "ttl_mean", "payload_mean", "payload_max",
-         "tcp_window_mean", "packets_per_second", "connection_rate",
-         "unique_dst_ports", "unique_dst_hosts", "syn_rate", "ack_rate",
-         "rst_rate", "syn_ack_ratio", "port_entropy"])}
-    nv[idx["packets_per_second"]] = 0.0
-    nv[idx["connection_rate"]] = 0.0
-    nv[idx["syn_rate"]] = 0.0
-    nv[idx["packets"]] = nv[idx["packets"]] * 0.2
+    idx = idx or {}
+    if "packets_per_second" in idx:
+        nv[idx["packets_per_second"]] = 0.0
+    if "connection_rate" in idx:
+        nv[idx["connection_rate"]] = 0.0
+    if "syn_rate" in idx:
+        nv[idx["syn_rate"]] = 0.0
+    if "packets" in idx:
+        nv[idx["packets"]] = nv[idx["packets"]] * 0.2
     return nv
 
 
-def _restrict_path(vec, feats):
-    # Simulate: restrict communication path to/from the suspicious host
+def _restrict_path(vec, feats, idx=None):
+    """Simulate: restrict communication path."""
     nv = vec.copy()
-    idx = {name: i for i, name in enumerate(
-        ["bytes", "packets", "ttl_mean", "payload_mean", "payload_max",
-         "tcp_window_mean", "packets_per_second", "connection_rate",
-         "unique_dst_ports", "unique_dst_hosts", "syn_rate", "ack_rate",
-         "rst_rate", "syn_ack_ratio", "port_entropy"])}
-    nv[idx["unique_dst_hosts"]] = nv[idx["unique_dst_hosts"]] * 0.1
-    nv[idx["unique_dst_ports"]] = nv[idx["unique_dst_ports"]] * 0.2
-    nv[idx["packets_per_second"]] = nv[idx["packets_per_second"]] * 0.3
+    idx = idx or {}
+    if "unique_dst_hosts" in idx:
+        nv[idx["unique_dst_hosts"]] = nv[idx["unique_dst_hosts"]] * 0.1
+    if "unique_dst_ports" in idx:
+        nv[idx["unique_dst_ports"]] = nv[idx["unique_dst_ports"]] * 0.2
+    if "packets_per_second" in idx:
+        nv[idx["packets_per_second"]] = nv[idx["packets_per_second"]] * 0.3
     return nv
 
 
-ACTIONS: Dict[str, DefensiveAction] = {
-    "no_action": DefensiveAction(
-        "no_action", "No Action",
-        "Do nothing — observe the natural attack evolution.",
-        _no_action,
-    ),
-    "block_source": DefensiveAction(
-        "block_source", "Block Source",
-        "Block the attacker source IP at the perimeter.",
-        _block_source,
-    ),
-    "block_dest_port": DefensiveAction(
-        "block_dest_port", "Block Destination Port",
-        "Block the targeted destination port.",
-        _block_dest_port,
-    ),
-    "isolate_host": DefensiveAction(
-        "isolate_host", "Isolate Host",
-        "Isolate the affected host from the network.",
-        _isolate_host,
-    ),
-    "terminate_flow": DefensiveAction(
-        "terminate_flow", "Terminate Flow",
-        "Terminate the active suspicious communication flow.",
-        _terminate_flow,
-    ),
-    "restrict_path": DefensiveAction(
-        "restrict_path", "Restrict Path",
-        "Restrict the communication path to/from the host.",
-        _restrict_path,
-    ),
-}
+# Build ACTIONS dynamically — will be initialized with feature columns at runtime
+_ACTIONS_REGISTRY: Dict[str, DefensiveAction] = {}
+
+
+def _build_actions(feature_columns: List[str]) -> Dict[str, DefensiveAction]:
+    """Build the actions dictionary using dynamic feature columns."""
+    idx = _get_idx_map(feature_columns)
+    return {
+        "no_action": DefensiveAction(
+            "no_action", "No Action",
+            "Do nothing — observe the natural attack evolution.",
+            lambda vec, feats: _no_action(vec, feats, idx),
+        ),
+        "block_source": DefensiveAction(
+            "block_source", "Block Source",
+            "Block the attacker source IP at the perimeter.",
+            lambda vec, feats: _block_source(vec, feats, idx),
+        ),
+        "block_dest_port": DefensiveAction(
+            "block_dest_port", "Block Destination Port",
+            "Block the targeted destination port.",
+            lambda vec, feats: _block_dest_port(vec, feats, idx),
+        ),
+        "isolate_host": DefensiveAction(
+            "isolate_host", "Isolate Host",
+            "Isolate the affected host from the network.",
+            lambda vec, feats: _isolate_host(vec, feats, idx),
+        ),
+        "terminate_flow": DefensiveAction(
+            "terminate_flow", "Terminate Flow",
+            "Terminate the active suspicious communication flow.",
+            lambda vec, feats: _terminate_flow(vec, feats, idx),
+        ),
+        "restrict_path": DefensiveAction(
+            "restrict_path", "Restrict Path",
+            "Restrict the communication path to/from the host.",
+            lambda vec, feats: _restrict_path(vec, feats, idx),
+        ),
+    }
+
+
+# Default actions with fallback (uses basic feature names if columns not available)
+_DEFAULT_COLUMNS = [
+    "bytes", "packets", "ttl_mean", "payload_mean", "payload_max",
+    "tcp_window_mean", "packets_per_second", "connection_rate",
+    "unique_dst_ports", "unique_dst_hosts", "syn_rate", "ack_rate",
+    "rst_rate", "syn_ack_ratio", "port_entropy",
+]
+
+ACTIONS: Dict[str, DefensiveAction] = _build_actions(_DEFAULT_COLUMNS)
+
+
+def get_actions_for_columns(feature_columns: List[str]) -> Dict[str, DefensiveAction]:
+    """Get actions built with the correct feature column mapping."""
+    return _build_actions(feature_columns)
 
 
 def get_action(action_id: str) -> DefensiveAction:

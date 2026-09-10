@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Network Topology — NetWatch{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Network Topology</h1>
+  <p>Discovered entities and communication links — <span class="mode-badge">OBSERVED</span></p>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h3>Entities ({{ topology.nodes|length if topology else 0 }})</h3>
+    {% if topology and topology.nodes %}
+    <table class="data-table">
+      <thead>
+        <tr><th>IP</th><th>Type</th><th>Criticality</th><th>Packets</th><th>Bytes</th><th>Peers</th></tr>
+      </thead>
+      <tbody>
+        {% for node in topology.nodes %}
+        <tr class="clickable-row" onclick="window.location='/api/entities/{{ node.entity_id }}'">
+          <td><strong>{{ node.ip }}</strong></td>
+          <td>{{ node.entity_type }}</td>
+          <td><span class="crit-badge {{ node.criticality|lower }}">{{ node.criticality }}</span></td>
+          <td>{{ node.packet_count }}</td>
+          <td>{{ node.byte_count }}</td>
+          <td>{{ node.degree }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No entities discovered yet</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Communication Edges ({{ topology.edges|length if topology else 0 }})</h3>
+    {% if topology and topology.edges %}
+    <table class="data-table">
+      <thead>
+        <tr><th>Source</th><th>Destination</th><th>Protocols</th><th>Packets</th><th>SYN</th><th>RST</th></tr>
+      </thead>
+      <tbody>
+        {% for edge in topology.edges %}
+        <tr>
+          <td>{{ edge.src_id|replace('entity_', '') }}</td>
+          <td>{{ edge.dst_id|replace('entity_', '') }}</td>
+          <td>{{ edge.protocols|join(', ') }}</td>
+          <td>{{ edge.packet_count }}</td>
+          <td>{{ edge.syn_count }}</td>
+          <td>{{ edge.rst_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No communication edges yet</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

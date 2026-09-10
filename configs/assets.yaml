@@ -1,0 +1,23 @@
+networks:
+  - cidr: 10.10.10.0/24
+    name: web-tier
+  - cidr: 10.10.20.0/24
+    name: database-tier
+
+assets:
+  - ip: 10.10.10.10
+    hostname: web-01
+    type: WEB_SERVER
+    criticality: HIGH
+  - ip: 10.10.10.20
+    hostname: web-02
+    type: WEB_SERVER
+    criticality: HIGH
+  - ip: 10.10.20.10
+    hostname: db-01
+    type: DATABASE
+    criticality: CRITICAL
+  - ip: 10.10.10.30
+    hostname: ssh-01
+    type: SERVER
+    criticality: MEDIUM

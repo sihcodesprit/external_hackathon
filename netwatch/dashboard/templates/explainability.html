@@ -1,11 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Risk & Explainability — Counterfactual Cyber World{% endblock %}
+{% block title %}Risk & Explainability — NetWatch{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Risk &amp; Explainability (SHAP)</h1>
-  <p>Which network features drive each predicted risk. Contributions come from
-  a SHAP explainer on the learned risk head (or a clearly-labelled magnitude
-  fallback).</p>
+  <h1>Risk &amp; Explainability</h1>
+  <p>Which network features drive each predicted risk, and how they evolve over time.</p>
 </div>
 
 <div class="card">
@@ -20,13 +18,14 @@
 
 <div class="card">
   <h3>Forecast Steps — Top Contributing Feature</h3>
-  <table>
-    <thead><tr><th>Step</th><th>Risk</th><th>Dominant Feature</th><th>Explanation Type</th></tr></thead>
+  <table class="data-table">
+    <thead><tr><th>Step</th><th>Risk</th><th>Stage</th><th>Dominant Feature</th><th>Type</th></tr></thead>
     <tbody>
     {% for step in forecast.future %}
       <tr>
         <td>t+{{ step.step }}</td>
         <td>{{ '%.0f'|format(step.risk*100) }}%</td>
+        <td>{{ step.stage }}</td>
         <td>
           {% if step.explanation.top_features %}
             {{ step.explanation.top_features[0].feature }} ({{ step.explanation.top_features[0].sign }}{{ step.explanation.top_features[0].contribution }})
@@ -38,4 +37,76 @@
     </tbody>
   </table>
 </div>
+
+{% if forecast.temporal_explanation is defined %}
+<div class="card">
+  <h3>Temporal Feature Evolution</h3>
+  <p class="muted">How feature contributions change across the forecast horizon.</p>
+
+  <div class="temporal-summary">
+    <p><strong>Summary:</strong> {{ forecast.temporal_explanation.summary }}</p>
+  </div>
+
+  {% if forecast.temporal_explanation.escalation_drivers %}
+  <div class="temporal-section">
+    <h4>Escalation Drivers (increasing risk)</h4>
+    <ul>
+    {% for f in forecast.temporal_explanation.escalation_drivers %}
+      <li><code>{{ f|replace('_', ' ') }}</code></li>
+    {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if forecast.temporal_explanation.stabilization_drivers %}
+  <div class="temporal-section">
+    <h4>Stabilization Drivers (decreasing risk)</h4>
+    <ul>
+    {% for f in forecast.temporal_explanation.stabilization_drivers %}
+      <li><code>{{ f|replace('_', ' ') }}</code></li>
+    {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if forecast.temporal_explanation.temporal_contributions %}
+  <table class="data-table">
+    <thead>
+      <tr><th>Step</th><th>Risk</th><th>Stage</th><th>Top 3 Features</th></tr>
+    </thead>
+    <tbody>
+    {% for tc in forecast.temporal_explanation.temporal_contributions %}
+      <tr>
+        <td>t+{{ tc.step }}</td>
+        <td>{{ '%.0f'|format(tc.risk * 100) }}%</td>
+        <td>{{ tc.stage }}</td>
+        <td>
+          {% for f in tc.top_features[:3] %}
+            <code>{{ f.feature }}</code> ({{ '%.4f'|format(f.contribution) }}){% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if forecast.temporal_explanation.feature_delta_summary %}
+  <div class="temporal-section">
+    <h4>Feature Change Summary (mean |delta| across steps)</h4>
+    <table class="data-table">
+      <thead><tr><th>Feature</th><th>Avg Change</th></tr></thead>
+      <tbody>
+      {% for f, delta in forecast.temporal_explanation.feature_delta_summary.items() %}
+        <tr>
+          <td><code>{{ f|replace('_', ' ') }}</code></td>
+          <td>{{ delta }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

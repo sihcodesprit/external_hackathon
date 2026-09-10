@@ -1,0 +1,200 @@
+{
+  "models": [
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T14:21:14.781004",
+      "metrics": {
+        "train_loss": 0.16453567477034742,
+        "val_loss": 0.21141842007637024
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T14:21:27.219173",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T14:21:33.395040",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T14:24:29.459395",
+      "metrics": {
+        "train_loss": 0.14654878233788443,
+        "val_loss": 0.20279090106487274
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T14:43:48.687716",
+      "metrics": {
+        "train_loss": 0.13577168471500523,
+        "val_loss": 0.18225079774856567
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T14:44:03.690273",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T14:44:07.901306",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T15:01:13.661670",
+      "metrics": {
+        "train_loss": 0.15198752797040782,
+        "val_loss": 0.21076329052448273
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T15:02:58.416752",
+      "metrics": {
+        "train_loss": 0.14715898293452184,
+        "val_loss": 0.18901631236076355
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T15:03:08.308715",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T15:03:12.541662",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T15:06:34.789722",
+      "metrics": {
+        "train_loss": 0.15680786136721,
+        "val_loss": 0.21798837184906006
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T15:06:45.612574",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "synthetic",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-10T15:06:52.401671",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "C:\\sih 2026\\external_hackathon\\data\\data\\models\\world_model_lstm.pt"
+    }
+  ]
+}

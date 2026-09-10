@@ -1,0 +1,17 @@
+model:
+  name: lstm_world_model
+  version: "2.0"
+  type: lstm
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 50
+  sequence_length: 10
+  device: auto
+
+checkpoints:
+  dir: models/checkpoints
+  save_best: true
+  max_checkpoints: 5

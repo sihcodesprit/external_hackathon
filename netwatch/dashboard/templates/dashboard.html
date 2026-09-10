@@ -1,39 +1,97 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Counterfactual Cyber World{% endblock %}
+{% block title %}SOC Dashboard — NetWatch{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Live Risk Dashboard</h1>
-  <p>Current network-state risk and recommended defensive posture from the world model.</p>
+  <h1>Cyber World Model</h1>
+  <p>Real-time network risk assessment and attack forecasting</p>
 </div>
 
-<div class="grid">
-  <div class="card">
-    <h3>Current State Risk</h3>
-    <div class="risk-gauge" style="--risk: {{ '%.2f'|format(current.risk) }};">
-      <span class="gauge-value">{{ '%.0f'|format(current.risk * 100) }}%</span>
+<div class="grid-4">
+  <div class="card metric-card">
+    <h3>Network Risk</h3>
+    <div class="big-number" style="color: {{ '#ff4444' if current.risk > 0.7 else '#ffaa00' if current.risk > 0.4 else '#44aa44' }}">
+      {{ '%.0f'|format(current.risk * 100) }}%
     </div>
-    <p class="muted">Predicted attack probability from the learned risk head.</p>
+    <div class="muted">Current attack probability</div>
   </div>
-
-  <div class="card">
-    <h3>Current Attack Stage</h3>
-    <div class="stage-badge">{{ current.stage }}</div>
-    <p class="muted">Predicted MITRE stage for the current window.</p>
+  <div class="card metric-card">
+    <h3>Active Hosts</h3>
+    <div class="big-number">{{ entities.entity_count|default(0) }}</div>
+    <div class="muted">Discovered entities</div>
   </div>
-
-  <div class="card">
-    <h3>Recommended Defensive Action</h3>
-    <div class="stage-badge action">{{ recommendation.recommended_label }}</div>
-    <p class="muted">{{ recommendation.reason }}</p>
+  <div class="card metric-card">
+    <h3>Active Edges</h3>
+    <div class="big-number">{{ topology.edges|length if topology else 0 }}</div>
+    <div class="muted">Communication links</div>
+  </div>
+  <div class="card metric-card">
+    <h3>Current Stage</h3>
+    <div class="big-number stage-badge" style="font-size: 1.2em;">{{ current.stage }}</div>
+    <div class="muted">MITRE ATT&CK phase</div>
   </div>
 </div>
-{% endblock %}
-{% block scripts %}
-<script>
-  const riskEl = document.querySelector('.risk-gauge');
-  if (riskEl) {
-    const risk = parseFloat(riskEl.style.getPropertyValue('--risk'));
-    riskEl.style.setProperty('--hue', (90 - risk * 90));
-  }
-</script>
+
+<div class="grid-2">
+  <div class="card">
+    <h3>Network Topology</h3>
+    <div class="topology-mini">
+      {% if topology and topology.nodes %}
+      <div class="topo-list">
+        {% for node in topology.nodes[:8] %}
+        <div class="topo-node" title="{{ node.ip }} ({{ node.entity_type }})">
+          <span class="node-dot {{ 'critical' if node.criticality == 'CRITICAL' else 'high' if node.criticality == 'HIGH' else '' }}"></span>
+          <strong>{{ node.entity_id|replace('entity_', '') }}</strong>
+          <span class="muted">{{ node.entity_type }}</span>
+        </div>
+        {% endfor %}
+        {% if topology.nodes|length > 8 %}
+        <div class="muted">+{{ topology.nodes|length - 8 }} more</div>
+        {% endif %}
+      </div>
+      <div class="topo-edges">
+        {% for edge in topology.edges[:6] %}
+        <div class="topo-edge">
+          {{ edge.src_id|replace('entity_', '') }} → {{ edge.dst_id|replace('entity_', '') }}
+          <span class="muted">({{ edge.packet_count }} pkts)</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">No topology data available</p>
+      {% endif %}
+    </div>
+    <a href="/topology" class="btn">View Full Topology</a>
+  </div>
+
+  <div class="card">
+    <h3>Recommended Action</h3>
+    <div class="recommendation-box">
+      <div class="stage-badge action">{{ recommendation.recommended_label }}</div>
+      <p>{{ recommendation.reason }}</p>
+      <div class="risk-reduction">
+        Risk reduction: <strong>{{ '%.0f'|format(recommendation.risk_reduction_pct_points) }}%</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Forecast Timeline</h3>
+  <div class="forecast-strip">
+    <div class="forecast-step current">
+      <span class="step-label">NOW</span>
+      <span class="step-risk">{{ '%.0f'|format(current.risk * 100) }}%</span>
+      <span class="step-stage">{{ current.stage }}</span>
+    </div>
+    {% if forecast_steps is defined %}
+    {% for step in forecast_steps %}
+    <div class="forecast-step">
+      <span class="step-label">+{{ step.step }}</span>
+      <span class="step-risk">{{ '%.0f'|format(step.risk * 100) }}%</span>
+      <span class="step-stage">{{ step.stage }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

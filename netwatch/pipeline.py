@@ -3,14 +3,12 @@ Top-level pipeline orchestrator.
 
 Ties the whole system together end-to-end:
 
-    synthetic ingestion
-        -> build NetworkStates
-        -> normalize + build sequences
-        -> train World Model (LSTM)
-        -> fit risk head + stage predictor
-        -> evaluate (continuous + classification) + baselines + unseen attack
-        -> optional K-step forecast + counterfactual defensive simulation
-        -> save artifacts
+    synthetic ingestion -> events -> entity resolution -> network graph
+    -> build NetworkStates -> normalize -> build sequences
+    -> train World Model (LSTM) -> fit risk head + stage predictor
+    -> evaluate (continuous + classification) + baselines + unseen attack
+    -> optional K-step forecast + counterfactual defensive simulation
+    -> save artifacts
 
 No data is fabricated. Every number in the returned report is computed from
 actual model outputs.
@@ -35,9 +33,11 @@ from netwatch.config import (
     WORLD_MODEL_PATH,
     WORLD_MODEL_TYPE,
     ensure_dirs,
+    get_feature_columns,
 )
 from netwatch.counterfactual.simulator import CounterfactualEngine
 from netwatch.explainability.shap_explainer import ShapExplainer
+from netwatch.explainability.temporal_explainer import TemporalExplainer
 from netwatch.features.network_state import StateBuilder
 from netwatch.features.sequences import (
     StateNormalizer,
@@ -52,6 +52,9 @@ from netwatch.forecasting.stage_predictor import StagePredictor
 from netwatch.ingestion.synthetic import generate_trace
 from netwatch.models.trainer import WorldModelTrainer
 from netwatch.mitre.attack_mapper import AttackMapper
+from netwatch.network.entities import EntityResolver, NetworkEntity
+from netwatch.network.graph import NetworkGraph
+from netwatch.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -75,15 +78,20 @@ class Pipeline:
         self.attack_forecaster = None
         self.counterfactual = None
         self.explainer = None
+        self.temporal_explainer = None
         self.results: Dict = {}
+        self.entity_resolver = EntityResolver()
+        self.network_graph = NetworkGraph()
+        self.model_registry = ModelRegistry()
+        self.feature_columns = get_feature_columns()
 
     # ── I. data ────────────────────────────────────────────
     def load_data(self, n_traces: int = 20, seed: int = 42,
                   duration_minutes: float = 120.0, **gen_kwargs) -> dict:
         """Generate (or, in future, ingest) event data and build states.
 
-        Traces are staggered in time so they concatenate into a long, diverse
-        timeline rather than overlapping onto the same clock.
+        Also performs entity resolution and graph construction from the
+        generated traffic.
         """
         records = []
         for i in range(n_traces):
@@ -92,15 +100,59 @@ class Pipeline:
                 duration_minutes=duration_minutes,
                 time_offset_minutes=i * duration_minutes,
                 **gen_kwargs))
+
+        # Entity resolution and graph construction
+        from datetime import datetime
+        for r in records:
+            from netwatch.core.events import NetworkEvent
+            try:
+                ts = datetime.fromisoformat(r.timestamp.replace("Z", "+00:00"))
+            except Exception:
+                ts = datetime.now()
+            event = NetworkEvent(
+                timestamp=ts,
+                src_ip=r.src_ip,
+                dst_ip=r.dst_ip,
+                protocol=r.protocol,
+                src_port=r.src_port or None,
+                dst_port=r.dst_port or None,
+                packet_size=r.bytes_sent,
+                payload_size=r.payload_size,
+                ttl=r.ttl or None,
+                tcp_flags=r.flags or None,
+                tcp_window=r.tcp_window or None,
+                label=r.label,
+                stage=r.stage or None,
+            )
+            self.entity_resolver.resolve(event)
+            src_eid = self.entity_resolver._ip_to_entity.get(r.src_ip)
+            dst_eid = self.entity_resolver._ip_to_entity.get(r.dst_ip)
+            if src_eid and dst_eid:
+                self.network_graph.add_node(src_eid, r.src_ip)
+                self.network_graph.add_node(dst_eid, r.dst_ip)
+                self.network_graph.add_communication(
+                    src_eid, dst_eid,
+                    protocol=r.protocol,
+                    port=r.dst_port or 0,
+                    packet_size=r.bytes_sent,
+                    timestamp=ts,
+                    tcp_flags=r.flags,
+                )
+
         builder = StateBuilder(group_by_pair=False)
         states = builder.build_states(records)
         states = assign_labels_and_stages(states, stage_vocab=None)
         self.states = states
+        self.network_graph.snapshot()
+
         return {
             "n_packets": len(records),
             "n_states": len(states),
             "n_attack_states": sum(1 for s in states if s.label == 1),
             "n_benign_states": sum(1 for s in states if s.label == 0),
+            "n_entities": len(self.entity_resolver.entities),
+            "n_graph_nodes": len(self.network_graph.nodes),
+            "n_graph_edges": len(self.network_graph.edges),
         }
 
     # ── II. train ──────────────────────────────────────────
@@ -108,18 +160,14 @@ class Pipeline:
         if not hasattr(self, "states") or not self.states:
             raise RuntimeError("load_data() must be called before train()")
 
-        # temporal (session-aware) split for validation
-        train_states, val_states = temporal_split(self.states,
-                                                  val_fraction=0.2)
+        train_states, val_states = temporal_split(self.states, val_fraction=0.2)
         self.normalizer.fit(self.states)
 
-        # sequences for World Model (continuous next-state regression)
         X_train, Y_train = build_sequences(train_states, self.normalizer)
         X_val, Y_val = build_sequences(val_states, self.normalizer)
         if X_train.shape[0] == 0:
             raise RuntimeError("Not enough states to build training sequences")
 
-        # Binary labels aligned with the sequence rows
         from netwatch.features.sequences import build_seq_labels
         bin_train = build_seq_labels(train_states)
         bin_val = build_seq_labels(val_states)
@@ -127,29 +175,41 @@ class Pipeline:
         self.trainer = WorldModelTrainer(
             model_type=WORLD_MODEL_TYPE, n_features=N_FEATURES)
 
-        # Train world model on continuous next-state target
         metrics = self.trainer.fit(X_train, Y_train, val_fraction=0.15,
                                    batch_size=32, epochs=30)
 
-        # Risk head: train logistic regression on normalized states -> label
         self.attack_forecaster = AttackForecaster(
             self.trainer.model, self.normalizer, self.stage_predictor,
-            feature_columns=FEATURE_COLUMNS)
+            feature_columns=self.feature_columns)
         self.attack_forecaster.fit_risk_head(self.states)
 
-        # Stage predictor (heuristic fallback used; no real labelled data yet)
         self.explainer = ShapExplainer(
             risk_model=self.attack_forecaster.risk_model
             if self.attack_forecaster._risk_trained else None,
-            feature_columns=FEATURE_COLUMNS, normalizer=self.normalizer)
+            feature_columns=self.feature_columns, normalizer=self.normalizer)
+
+        self.temporal_explainer = TemporalExplainer(
+            shap_explainer=self.explainer,
+            feature_columns=self.feature_columns)
 
         self._X_train, self._Y_train = X_train, Y_train
         self._X_val, self._Y_val = X_val, Y_val
         self._bin_train, self._bin_val = bin_train, bin_val
 
-        # persist artifacts
         self.normalizer.save(SCALER_PATH)
         self.trainer.save(str(WORLD_MODEL_PATH))
+
+        # Register model in registry
+        self.model_registry.register(
+            name="lstm_world_model",
+            version="2.0",
+            checkpoint_path=str(WORLD_MODEL_PATH),
+            dataset=self.dataset,
+            feature_count=N_FEATURES,
+            sequence_length=10,
+            metrics={"train_loss": metrics.get("final_train_loss"),
+                     "val_loss": metrics.get("final_val_loss")},
+        )
 
         return {
             "training": metrics,
@@ -165,7 +225,6 @@ class Pipeline:
         from netwatch.evaluation.unseen_attack import UnseenAttackTest
 
         evaluator = ModelEvaluator(self.trainer, self.normalizer)
-        # build a validation/test evaluation using the preserved splits
         eval_result = evaluator.evaluate(
             self._X_train, self._Y_train, self._X_val, self._Y_val,
             bin_train=_safe_bin(self._bin_train),
@@ -175,7 +234,6 @@ class Pipeline:
 
         if include_unseen:
             unseen = UnseenAttackTest(self.trainer, self.normalizer)
-            # hold out one attack stage entirely from training states
             train_states = [s for s in self.states
                             if s.stage not in ("Exfiltration", "Impact")]
             unseen_states = [s for s in self.states
@@ -199,10 +257,6 @@ class Pipeline:
         if not self.states:
             raise RuntimeError("No data loaded")
 
-        # pick a recent window where the attack is ONGOING (the next state is
-        # also an attack), so the counterfactual meaningfully contrasts
-        # continued risk vs containment. Fall back to the last attack window,
-        # then the timeline tail.
         seq_len = self._X_train.shape[1] if hasattr(self, "_X_train") else 10
         attack_idx = None
         for i in range(len(self.states) - 2, -1, -1):
@@ -220,11 +274,9 @@ class Pipeline:
 
         forecast = self.attack_forecaster.forecast(history, k=k)
 
-        # predictive attack graph
         from netwatch.graph.predictive_attack_graph import build_predictive_graph
         graph = build_predictive_graph(forecast)
 
-        # attach SHAP explanations to each forecast step
         for step in forecast["future"]:
             step["explanation"] = self.explainer.explain(
                 step["state_vec"], step["features"])
@@ -232,13 +284,16 @@ class Pipeline:
             forecast["current"]["state_vec"],
             forecast["current"]["features"])
 
-        # counterfactual defensive simulation
+        # Temporal explanation across the forecast horizon
+        temporal_explanation = self.temporal_explainer.analyze(forecast["future"])
+        forecast["temporal_explanation"] = temporal_explanation
+
         self.counterfactual = CounterfactualEngine(
-            self.trainer.model, self.attack_forecaster, self.normalizer)
+            self.trainer.model, self.attack_forecaster, self.normalizer,
+            feature_columns=self.feature_columns)
         sim = self.counterfactual.simulate(history, actions=DEFAULT_ACTIONS, k=k)
         rec = self.counterfactual.recommend(sim)
 
-        # map current + future stages to MITRE
         stages = [forecast["current"]["stage"]] + \
                  [st["stage"] for st in forecast["future"]]
         mitre = self.attack_mapper.map_trajectory(stages)
@@ -248,6 +303,8 @@ class Pipeline:
             "graph": graph,
             "counterfactual": {**sim, "recommendation": rec},
             "mitre_trajectory": mitre,
+            "network_topology": self.network_graph.get_topology(),
+            "entity_summary": self.entity_resolver.get_topology(),
         }
         self.results["forecast"] = out
         return out
