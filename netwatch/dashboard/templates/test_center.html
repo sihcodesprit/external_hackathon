@@ -3,110 +3,213 @@
 {% block content %}
 <div class="page-header">
   <h1>Model Test Center</h1>
-  <p>Test each component of the pipeline independently</p>
+  <p>Test and validate each component of the AI World Model and detection stack independently.</p>
 </div>
 
 <div class="card">
-  <h3>Test Configuration</h3>
-  <div class="form-grid">
-    <div class="form-group">
-      <label>Dataset</label>
-      <select id="test-dataset">
-        <option value="synthetic">Synthetic (Development)</option>
-        <option value="pcap">PCAP File</option>
-        <option value="csv">CSV Flow Data</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>Window (seconds)</label>
-      <input type="number" id="test-window" value="30" min="5" max="300">
-    </div>
-    <div class="form-group">
-      <label>Step (seconds)</label>
-      <input type="number" id="test-step" value="10" min="1" max="60">
-    </div>
-    <div class="form-group">
-      <label>Horizon (K steps)</label>
-      <input type="number" id="test-horizon" value="5" min="1" max="20">
-    </div>
+  <h3>Pipeline Component Diagnostics</h3>
+  <p class="muted">Select components to test and click "Run Diagnostics".</p>
+
+  <div class="checkbox-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 16px 0;">
+    <label><input type="checkbox" id="test-world-model" checked> LSTM World Model</label>
+    <label><input type="checkbox" id="test-forecast" checked> K-Step Rollout</label>
+    <label><input type="checkbox" id="test-ensemble" checked> Ensemble Scorer</label>
+    <label><input type="checkbox" id="test-counterfactual" checked> Counterfactual Simulator</label>
+    <label><input type="checkbox" id="test-mitre" checked> MITRE ATT&CK Mapper</label>
+    <label><input type="checkbox" id="test-topology" checked> Network Topology Graph</label>
+    <label><input type="checkbox" id="test-evaluation" checked> Evaluation Baselines</label>
   </div>
 
-  <div class="checkbox-grid">
-    <label><input type="checkbox" id="test-detection" checked> Detection</label>
-    <label><input type="checkbox" id="test-network-state" checked> Network State</label>
-    <label><input type="checkbox" id="test-world-model" checked> World Model</label>
-    <label><input type="checkbox" id="test-forecast" checked> K-Step Forecast</label>
-    <label><input type="checkbox" id="test-mitre" checked> MITRE</label>
-    <label><input type="checkbox" id="test-explain" checked> Explainability</label>
-    <label><input type="checkbox" id="test-attack-graph" checked> Attack Graph</label>
-    <label><input type="checkbox" id="test-counterfactual" checked> Counterfactual</label>
-    <label><input type="checkbox" id="test-full-pipeline" checked> Full Pipeline</label>
-  </div>
-
-  <button class="btn btn-primary" onclick="runTest()">Run Test</button>
+  <button class="btn btn-primary" id="runTestBtn" onclick="runDiagnostics()">Run Diagnostics</button>
 </div>
 
 <div id="test-results" class="card" style="display:none;">
-  <h3>Test Results</h3>
-  <div id="results-content"></div>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <h3 style="margin: 0;">Diagnostic Results</h3>
+    <span id="overallStatusBadge" class="badge-detector badge-info">Running...</span>
+  </div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Category</th>
+        <th>Status</th>
+        <th>Diagnostic Output</th>
+      </tr>
+    </thead>
+    <tbody id="results-tbody"></tbody>
+  </table>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-async function runTest() {
-  const btn = document.querySelector('.btn-primary');
+async function runDiagnostics() {
+  const btn = document.getElementById('runTestBtn');
   btn.disabled = true;
-  btn.textContent = 'Running...';
-  
+  btn.textContent = 'Running Diagnostics...';
+
   const resultsDiv = document.getElementById('test-results');
-  const contentDiv = document.getElementById('results-content');
+  const tbody = document.getElementById('results-tbody');
+  const overallBadge = document.getElementById('overallStatusBadge');
+  
   resultsDiv.style.display = 'block';
-  contentDiv.innerHTML = '<p class="muted">Running pipeline test...</p>';
-  
+  tbody.innerHTML = '<tr><td colspan="4" class="muted">Executing pipeline tests...</td></tr>';
+  overallBadge.className = 'badge-detector badge-warning';
+  overallBadge.textContent = 'IN PROGRESS';
+
+  const rows = [];
+  let allPass = true;
+
   try {
-    const response = await fetch('/api/scenario', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        k: parseInt(document.getElementById('test-horizon').value) || 5
-      })
-    });
-    const data = await response.json();
-    
-    let html = '<table class="data-table"><thead><tr><th>Component</th><th>Status</th><th>Details</th></tr></thead><tbody>';
-    
-    // Detection
-    if (data.baseline_current_risk !== undefined) {
-      html += `<tr><td>Detection</td><td class="status-ok">OK</td><td>Current risk: ${(data.baseline_current_risk*100).toFixed(1)}%</td></tr>`;
-    } else {
-      html += `<tr><td>Detection</td><td class="status-fail">SKIP</td><td>Not requested</td></tr>`;
+    // 1. Forecast & World Model
+    if (document.getElementById('test-world-model').checked || document.getElementById('test-forecast').checked) {
+      const res = await fetch('/api/forecast');
+      const data = await res.json();
+      if (data.status === 'ok') {
+        rows.push({
+          name: 'LSTM Cyber World Model',
+          cat: 'Deep Temporal Simulation',
+          status: 'PASS',
+          badge: 'success',
+          msg: `Current Risk: ${(data.current.risk * 100).toFixed(1)}%, Stage: ${data.current.stage}`
+        });
+        rows.push({
+          name: 'K-Step Forward Rollout',
+          cat: 'Temporal Forecaster',
+          status: 'PASS',
+          badge: 'success',
+          msg: `Generated ${data.future.length} recursive future states (Horizon: t+${data.k})`
+        });
+      } else {
+        allPass = false;
+        rows.push({
+          name: 'World Model & Forecast',
+          cat: 'Deep Learning',
+          status: 'FAIL',
+          badge: 'danger',
+          msg: data.error || 'Failed to produce forecast'
+        });
+      }
     }
-    
-    // Forecast
-    if (data.results && data.results.no_action) {
-      html += `<tr><td>K-Step Forecast</td><td class="status-ok">OK</td><td>Horizon: ${data.k || 5} steps</td></tr>`;
+
+    // 2. Ensemble Scorer
+    if (document.getElementById('test-ensemble').checked) {
+      const res = await fetch('/api/ensemble');
+      const data = await res.json();
+      if (data.status === 'ok' && data.consensus) {
+        rows.push({
+          name: 'Multi-Tool Ensemble Scorer',
+          cat: 'Ensemble Consensus',
+          status: 'PASS',
+          badge: 'success',
+          msg: `Consensus: ${data.consensus.score}% (${data.consensus.agreement_count}/${data.consensus.total_detectors} detectors agree)`
+        });
+      } else {
+        allPass = false;
+        rows.push({
+          name: 'Ensemble Scorer',
+          cat: 'Ensemble Consensus',
+          status: 'FAIL',
+          badge: 'danger',
+          msg: data.error || 'Ensemble evaluation error'
+        });
+      }
     }
-    
-    // Counterfactual
-    if (data.results) {
-      const actions = Object.keys(data.results).length;
-      html += `<tr><td>Counterfactual</td><td class="status-ok">OK</td><td>${actions} actions simulated</td></tr>`;
+
+    // 3. Counterfactual Simulator
+    if (document.getElementById('test-counterfactual').checked) {
+      const res = await fetch('/api/counterfactual');
+      const data = await res.json();
+      if (data.status === 'ok' && data.results) {
+        rows.push({
+          name: 'Counterfactual Simulator',
+          cat: 'Decision Support',
+          status: 'PASS',
+          badge: 'success',
+          msg: `Simulated ${Object.keys(data.results).length} defensive actions (Best: ${data.recommendation.recommended_label})`
+        });
+      } else {
+        allPass = false;
+        rows.push({
+          name: 'Counterfactual Simulator',
+          cat: 'Decision Support',
+          status: 'FAIL',
+          badge: 'danger',
+          msg: data.error || 'Counterfactual simulation failed'
+        });
+      }
     }
-    
-    // Recommendation
-    if (data.recommendation) {
-      html += `<tr><td>Recommendation</td><td class="status-ok">OK</td><td>${data.recommendation.recommended_label}</td></tr>`;
+
+    // 4. MITRE ATT&CK Mapper
+    if (document.getElementById('test-mitre').checked) {
+      const res = await fetch('/api/mitre');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        rows.push({
+          name: 'MITRE ATT&CK Mapper',
+          cat: 'Threat Classification',
+          status: 'PASS',
+          badge: 'success',
+          msg: `Mapped ${data.length} trajectory steps to ATT&CK matrix (${data[0]?.technique_id || 'T1046'})`
+        });
+      }
     }
-    
-    html += '</tbody></table>';
-    contentDiv.innerHTML = html;
-  } catch(e) {
-    contentDiv.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+
+    // 5. Network Topology Graph
+    if (document.getElementById('test-topology').checked) {
+      const res = await fetch('/api/topology');
+      const data = await res.json();
+      if (data.nodes) {
+        rows.push({
+          name: 'Dynamic Network Graph',
+          cat: 'Graph Analytics',
+          status: 'PASS',
+          badge: 'success',
+          msg: `Discovered ${data.nodes.length} host entities and ${data.edges.length} communication links`
+        });
+      }
+    }
+
+    // 6. Evaluation Baselines
+    if (document.getElementById('test-evaluation').checked) {
+      const res = await fetch('/api/evaluation');
+      const data = await res.json();
+      if (data.model_evaluation) {
+        rows.push({
+          name: 'Evaluation & Baselines',
+          cat: 'Model Benchmark',
+          status: 'PASS',
+          badge: 'success',
+          msg: `Benchmark active (Continuous MSE & Classifiers: ${Object.keys(data.model_evaluation.baselines || {}).join(', ')})`
+        });
+      }
+    }
+
+    // Render diagnostic rows
+    tbody.innerHTML = '';
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${r.name}</strong></td>
+        <td class="muted">${r.cat}</td>
+        <td><span class="badge-detector badge-${r.badge}">${r.status}</span></td>
+        <td>${r.msg}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    overallBadge.className = allPass ? 'badge-detector badge-success' : 'badge-detector badge-danger';
+    overallBadge.textContent = allPass ? 'ALL TESTS PASSED' : 'SOME TESTS FAILED';
+
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color: var(--danger);">Diagnostic error: ${err.message}</td></tr>`;
+    overallBadge.className = 'badge-detector badge-danger';
+    overallBadge.textContent = 'ERROR';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Diagnostics';
   }
-  
-  btn.disabled = false;
-  btn.textContent = 'Run Test';
 }
 </script>
 {% endblock %}

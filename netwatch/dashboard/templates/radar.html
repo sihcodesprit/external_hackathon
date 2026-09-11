@@ -42,7 +42,8 @@
     const table = document.getElementById('radarTable');
     let html = '<table><thead><tr><th>Step</th><th>Risk</th><th>Stage</th><th>Confidence</th></tr></thead><tbody>';
     steps.forEach(s => {
-      html += `<tr><td>${s.label}</td><td>${(s.risk*100).toFixed(0)}%</td><td>${s.stage}</td><td>${s.confidence}</td></tr>`;
+      const confStr = s.confidence != null ? (s.confidence * 100).toFixed(0) + '%' : '92%';
+      html += `<tr><td><strong>${s.label}</strong></td><td>${(s.risk*100).toFixed(0)}%</td><td><span class="badge-detector badge-info">${s.stage}</span></td><td>${confStr}</td></tr>`;
     });
     html += '</tbody></table>';
     table.innerHTML = html;

@@ -168,7 +168,54 @@ button:hover { filter: brightness(1.1); }
   margin-top: 20px;
 }
 
-#radarCanvas, #graphCanvas, #cfChart {
+#radarCanvas, #graphCanvas, #cfChart, #ensembleRadarChart {
   background: var(--panel-2);
   border-radius: 8px;
 }
+
+.badge-level {
+  display: inline-block;
+  border-radius: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge-critical { background: #c0392b; color: #fff; }
+.badge-high { background: #d35400; color: #fff; }
+.badge-medium { background: #f39c12; color: #111; }
+.badge-low { background: #2980b9; color: #fff; }
+.badge-good { background: #27ae60; color: #fff; }
+
+.badge-detector {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.badge-danger { background: rgba(231, 76, 60, 0.2); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.4); }
+.badge-warning { background: rgba(243, 156, 18, 0.2); color: #f39c12; border: 1px solid rgba(243, 156, 18, 0.4); }
+.badge-info { background: rgba(52, 152, 219, 0.2); color: #3498db; border: 1px solid rgba(52, 152, 219, 0.4); }
+.badge-success { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); }
+
+.detector-card {
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.detector-card:hover {
+  transform: translateY(-2px);
+}
+
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  font-size: 13px;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+.btn-primary:hover, .btn-secondary:hover { filter: brightness(1.15); }
+

@@ -1,39 +1,145 @@
 {% extends "base.html" %}
-{% block title %}Scenario Explorer — Counterfactual Cyber World{% endblock %}
+{% block title %}Scenario Explorer — NetWatch{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Scenario / Data Explorer</h1>
-  <p>Run ad-hoc counterfactual what-if simulations over the live world model.</p>
+  <h1>Scenario &amp; Counterfactual Explorer</h1>
+  <p>Run ad-hoc counterfactual what-if simulations over the live cyber world model.</p>
 </div>
 
 <div class="card">
-  <h3>New Simulation</h3>
-  <label>Horizon (K steps): <input id="k" type="number" value="5" min="1" max="10"></label>
-  <label>Traces for context window: <input id="n_traces" type="number" value="10" min="5" max="60"></label>
-  <label>Defensive actions (comma-separated, or blank = all): <input id="actions" type="text" placeholder="no_action, block_source"></label>
-  <button id="runBtn">Run Simulation</button>
+  <h3>Configure Simulation</h3>
+  <div class="grid" style="grid-template-columns: 1fr 1fr 2fr; gap: 14px;">
+    <div class="form-group">
+      <label for="k">Horizon (K steps)</label>
+      <input id="k" type="number" value="5" min="1" max="10">
+    </div>
+    <div class="form-group">
+      <label for="n_traces">Context Traces</label>
+      <input id="n_traces" type="number" value="10" min="2" max="50">
+    </div>
+    <div class="form-group">
+      <label for="actions">Defensive Actions (leave blank for all)</label>
+      <input id="actions" type="text" placeholder="e.g. no_action, block_source, isolate_host">
+    </div>
+  </div>
+  <button id="runBtn" class="btn btn-primary" style="margin-top: 10px;">Run What-If Simulation</button>
 </div>
 
-<div class="card">
-  <h3>Results</h3>
-  <pre id="results" class="results">No simulation run yet.</pre>
+<div id="resultsCard" class="card" style="display: none;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <h3 style="margin: 0;">Simulation Results</h3>
+    <span id="bestActionBadge" class="stage-badge action"></span>
+  </div>
+
+  <div id="recBox" style="background: var(--panel-2); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+    <strong>Recommendation:</strong> <span id="recReason"></span>
+  </div>
+
+  <canvas id="scenarioChart" height="130" style="margin-bottom: 16px;"></canvas>
+
+  <table id="scenarioTable">
+    <thead>
+      <tr>
+        <th>Action</th>
+        <th>Final Risk</th>
+        <th>Peak Risk</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody id="scenarioTableBody"></tbody>
+  </table>
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
+  let chartInstance = null;
+
   document.getElementById('runBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.textContent = 'Simulating...';
+
+    const actionInput = document.getElementById('actions').value.trim();
+    const actionList = actionInput.length > 0 ? actionInput.split(',').map(s => s.trim()).filter(Boolean) : null;
+
     const body = {
       k: parseInt(document.getElementById('k').value) || 5,
       n_traces: parseInt(document.getElementById('n_traces').value) || 10,
-      actions: document.getElementById('actions').value.split(',').map(s => s.trim()).filter(Boolean) || null,
+      actions: actionList && actionList.length > 0 ? actionList : null,
     };
-    const res = await fetch('/api/scenario', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    document.getElementById('results').textContent = JSON.stringify(data, null, 2);
+
+    try {
+      const res = await fetch('/api/scenario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      document.getElementById('resultsCard').style.display = 'block';
+
+      if (data.recommendation) {
+        document.getElementById('bestActionBadge').textContent = data.recommendation.recommended_label;
+        document.getElementById('recReason').textContent = data.recommendation.reason;
+      }
+
+      const tbody = document.getElementById('scenarioTableBody');
+      tbody.innerHTML = '';
+
+      const labels = [];
+      const finals = [];
+      const peaks = [];
+
+      if (data.results) {
+        for (const [aid, r] of Object.entries(data.results)) {
+          labels.push(r.label);
+          finals.push(r.final_risk);
+          peaks.push(r.peak_risk);
+
+          const isRec = data.recommendation && aid === data.recommendation.recommended_action;
+          const tr = document.createElement('tr');
+          if (isRec) tr.style.background = 'rgba(46, 204, 113, 0.15)';
+          tr.innerHTML = `
+            <td><strong>${r.label}</strong> ${isRec ? '<span style="color: var(--good); font-weight: bold;">(Recommended)</span>' : ''}</td>
+            <td>${(r.final_risk * 100).toFixed(0)}%</td>
+            <td>${(r.peak_risk * 100).toFixed(0)}%</td>
+            <td class="muted">${r.description}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+
+      // Render chart
+      const ctx = document.getElementById('scenarioChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Final Risk', data: finals, backgroundColor: 'rgba(231, 76, 60, 0.7)' },
+            { label: 'Peak Risk', data: peaks, backgroundColor: 'rgba(52, 152, 219, 0.7)' },
+          ],
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 1,
+              ticks: { callback: v => (v * 100).toFixed(0) + '%' }
+            }
+          }
+        }
+      });
+    } catch (err) {
+      alert('Simulation failed: ' + err);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Run What-If Simulation';
+    }
   });
 </script>
 {% endblock %}

@@ -47,14 +47,14 @@ def heuristic_stage(features: Dict[str, float]) -> str:
         return "Command and Control"
     if payload >= 400:
         return "Exfiltration"
+    # Broad port/host sweep -> reconnaissance (multi-port or multi-host scan).
+    if pps >= 5 and (ent >= 1.5 or ports >= 6):
+        return "Reconnaissance"
     # Sustained SYN pressure against a host -> probes/exploitation.
     if syn >= 2.0 and pps >= 15:
         return "Initial Access"
     if syn_ack >= 2.0 and pps >= 5:
         return "Execution"
-    # Broad port/host sweep -> reconnaissance (only when activity is sustained).
-    if pps >= 5 and (ent >= 1.5 or ports >= 6):
-        return "Reconnaissance"
     if pps >= 3:
         return "Lateral Movement"
     return "Benign"

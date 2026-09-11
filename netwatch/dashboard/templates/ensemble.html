@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}Ensemble Threat Scoring — NetWatch SOC{% endblock %}
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+  <div>
+    <h1>Multi-Tool Threat Scoring & Consensus Ensemble</h1>
+    <p>Target Traffic: <strong>{{ filename }}</strong> &middot; Evaluated against 8 detection engines, models, and protocol analyzers</p>
+  </div>
+  <div>
+    <button class="btn btn-primary" onclick="document.getElementById('uploadSection').scrollIntoView({behavior: 'smooth'})">Upload Another PCAP</button>
+  </div>
+</div>
+
+{% if ensemble %}
+<!-- ── Consensus Verdict Hero Banner ──────────────────────── -->
+<div class="grid" style="grid-template-columns: 1fr 1fr 1.2fr; margin-bottom: 20px;">
+  <!-- Threat Score & Level Card -->
+  <div class="card" style="text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+    <h3>Consensus Threat Score</h3>
+    <div class="risk-gauge" style="--risk: {{ '%.2f'|format(ensemble.consensus.score_raw) }}; --hue: {{ (1.0 - ensemble.consensus.score_raw) * 120 }}; width: 160px; height: 160px;">
+      <span class="gauge-value" style="font-size: 32px; font-weight: 800;">{{ ensemble.consensus.score }}%</span>
+    </div>
+    <div style="margin-top: 10px;">
+      <span class="badge-level badge-{{ ensemble.consensus.verdict_badge }}" style="font-size: 15px; padding: 6px 14px; text-transform: uppercase; font-weight: 700;">
+        {{ ensemble.consensus.threat_level }} &middot; {{ ensemble.consensus.threat_status }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Detector Agreement & MITRE Mapping -->
+  <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <h3>Consensus Agreement</h3>
+      <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;">
+        <span style="font-size: 28px; font-weight: 700; color: var(--accent);">{{ ensemble.consensus.agreement_count }} / {{ ensemble.consensus.total_detectors }}</span>
+        <span class="muted">Detectors Agree ({{ ensemble.consensus.agreement_pct }}% Consensus)</span>
+      </div>
+      <div class="progress-bar-container" style="background: var(--panel-2); height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 16px;">
+        <div style="width: {{ ensemble.consensus.agreement_pct }}%; height: 100%; background: {% if ensemble.consensus.agreement_pct >= 60 %}var(--danger){% elif ensemble.consensus.agreement_pct >= 40 %}#f39c12{% else %}var(--good){% endif %};"></div>
+      </div>
+    </div>
+
+    <div>
+      <h3>Primary MITRE ATT&CK Classification</h3>
+      <div style="background: var(--panel-2); padding: 12px; border-radius: 8px; border-left: 4px solid var(--accent);">
+        <div style="font-weight: 700; font-size: 15px; color: var(--text);">{{ ensemble.consensus.primary_stage }}</div>
+        <div class="muted" style="margin-top: 4px;">
+          Tactic: <strong>{{ ensemble.consensus.mitre.tactic }}</strong><br>
+          Technique: <strong>{{ ensemble.consensus.mitre.technique_id }}</strong> &mdash; {{ ensemble.consensus.mitre.technique_name }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Executive Verdict Summary & Defense Action -->
+  <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <h3>Synthesized Executive Verdict</h3>
+      <p style="font-size: 13.5px; line-height: 1.6; color: var(--text); background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px;">
+        {{ ensemble.consensus.summary }}
+      </p>
+    </div>
+    <div>
+      <h3>Recommended Defense</h3>
+      <div style="background: var(--panel-2); padding: 12px; border-radius: 8px; border-left: 4px solid var(--good);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <strong style="color: var(--good); font-size: 14px;">{{ ensemble.consensus.recommendation.action_label }}</strong>
+          <span style="font-size: 12px; background: rgba(46, 204, 113, 0.2); color: var(--good); padding: 2px 8px; border-radius: 12px;">
+            -{{ ensemble.consensus.recommendation.projected_risk_reduction_pct }}% Risk
+          </span>
+        </div>
+        <p class="muted" style="margin: 6px 0 0; font-size: 12.5px;">{{ ensemble.consensus.recommendation.reason }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Visual Comparison Section ──────────────────────────── -->
+<div class="grid" style="grid-template-columns: 1.2fr 1fr; margin-bottom: 20px;">
+  <!-- Radar Chart -->
+  <div class="card">
+    <h3>Detector Score Distribution (Radar)</h3>
+    <div style="max-height: 280px; display: flex; justify-content: center;">
+      <canvas id="ensembleRadarChart" height="260"></canvas>
+    </div>
+  </div>
+
+  <!-- Scoring Weights & Methodology Breakdown -->
+  <div class="card">
+    <h3>Ensemble Methodology & Weighting</h3>
+    <table style="font-size: 12.5px;">
+      <thead>
+        <tr><th>Layer</th><th>Engines / Tools</th><th>Weight</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong style="color: #3498db;">Temporal World Model</strong></td>
+          <td>LSTM Cyber World Model (K-step rollout)</td>
+          <td><strong>25%</strong></td>
+        </tr>
+        <tr>
+          <td><strong style="color: #9b59b6;">Machine Learning</strong></td>
+          <td>Random Forest, Gradient Boosting, Logistic Regression</td>
+          <td><strong>30%</strong></td>
+        </tr>
+        <tr>
+          <td><strong style="color: #e67e22;">Protocol Dynamics</strong></td>
+          <td>Shannon Entropy Engine, TCP Handshake & Asymmetry</td>
+          <td><strong>25%</strong></td>
+        </tr>
+        <tr>
+          <td><strong style="color: #e74c3c;">Graph & Heuristics</strong></td>
+          <td>Dynamic Graph Topology, MITRE ATT&CK Signatures</td>
+          <td><strong>20%</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top: 14px; font-size: 12px; color: var(--muted);">
+      Each tool evaluates independent statistical, temporal, and structural dimensions of the traffic to form an unbiased consensus verdict.
+    </div>
+  </div>
+</div>
+
+<!-- ── Individual Detector Score Breakdown Grid ───────────── -->
+<h2 style="font-size: 20px; margin: 24px 0 14px; color: var(--text);">Individual Detector Breakdown (8 Engines)</h2>
+<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+  {% for d in ensemble.detectors %}
+  <div class="card detector-card" style="border-top: 3px solid {% if d.badge == 'danger' %}var(--danger){% elif d.badge == 'warning' %}#f39c12{% else %}var(--good){% endif %};">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+      <div>
+        <div style="font-weight: 700; font-size: 15px; color: var(--text);">{{ d.name }}</div>
+        <div class="muted" style="font-size: 11.5px;">{{ d.category }}</div>
+      </div>
+      <span class="badge-detector badge-{{ d.badge }}">{{ d.verdict }}</span>
+    </div>
+
+    <!-- Mini Progress Bar -->
+    <div style="margin: 10px 0;">
+      <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+        <span class="muted">Threat Score</span>
+        <strong>{{ '%.1f'|format(d.score * 100) }}%</strong>
+      </div>
+      <div class="progress-bar-container" style="background: var(--panel-2); height: 8px; border-radius: 4px; overflow: hidden;">
+        <div style="width: {{ '%.1f'|format(d.score * 100) }}%; height: 100%; background: {% if d.score >= 0.6 %}var(--danger){% elif d.score >= 0.35 %}#f39c12{% else %}var(--good){% endif %};"></div>
+      </div>
+    </div>
+
+    <p style="font-size: 12.5px; color: var(--muted); margin: 8px 0;">{{ d.details }}</p>
+
+    <!-- Key Evidence Points -->
+    <div style="background: var(--panel-2); padding: 8px 10px; border-radius: 6px; font-size: 11.5px;">
+      <div style="font-weight: 600; color: var(--muted); margin-bottom: 4px;">Key Evidence:</div>
+      <ul style="margin: 0; padding-left: 16px; color: var(--text);">
+        {% for ev in d.evidence %}
+        <li>{{ ev }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ── PCAP Upload & Test Box ──────────────────────────────── -->
+<div class="card" id="uploadSection" style="margin-top: 30px;">
+  <h3>Run Ensemble Scorer on New Traffic (PCAP / CSV / JSONL)</h3>
+  <form method="POST" action="{{ url_for('ensemble') }}" enctype="multipart/form-data">
+    <div class="grid" style="grid-template-columns: 2fr 1fr auto; align-items: end; gap: 14px;">
+      <div class="form-group" style="margin: 0;">
+        <label for="file" style="display: block; margin-bottom: 6px; font-size: 13px;">Select File (PCAP, PCAPNG, CSV, or JSONL)</label>
+        <input type="file" name="file" id="file" accept=".pcap,.pcapng,.csv,.jsonl" required style="width: 100%; padding: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+      </div>
+      <div class="form-group" style="margin: 0;">
+        <label for="file_type" style="display: block; margin-bottom: 6px; font-size: 13px;">File Format</label>
+        <select name="file_type" id="file_type" style="width: 100%; padding: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+          <option value="auto">Auto-detect</option>
+          <option value="pcap">PCAP / PCAPNG</option>
+          <option value="csv">CSV (Flow Records)</option>
+          <option value="jsonl">JSONL (Packet Records)</option>
+        </select>
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary" style="padding: 9px 20px; font-weight: 600;">Score Traffic</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% if ensemble and ensemble.radar_data %}
+<script>
+  // Render Ensemble Radar Chart
+  const ctx = document.getElementById('ensembleRadarChart').getContext('2d');
+  const radarData = {{ ensemble.radar_data|tojson }};
+  
+  new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: radarData.labels,
+      datasets: [{
+        label: 'Threat Score (%)',
+        data: radarData.scores,
+        backgroundColor: 'rgba(231, 76, 60, 0.25)',
+        borderColor: '#e74c3c',
+        pointBackgroundColor: '#e74c3c',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: '#e74c3c',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+          grid: { color: 'rgba(255, 255, 255, 0.1)' },
+          pointLabels: {
+            color: '#8b98ad',
+            font: { size: 11, weight: '600' }
+          },
+          suggestedMin: 0,
+          suggestedMax: 100,
+          ticks: {
+            color: '#8b98ad',
+            backdropColor: 'transparent',
+            stepSize: 25
+          }
+        }
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

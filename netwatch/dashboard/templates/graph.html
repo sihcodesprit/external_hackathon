@@ -1,59 +1,149 @@
 {% extends "base.html" %}
-{% block title %}Predicted Attack Graph — Counterfactual Cyber World{% endblock %}
+{% block title %}Predicted Attack Graph — NetWatch{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Predicted Attack Graph</h1>
-  <p>Directed transitions between predicted MITRE stages with edge confidence.</p>
+  <p>Directed state transitions between current and forecasted MITRE stages with edge transition confidence.</p>
 </div>
+
 <div class="card">
-  <canvas id="graphCanvas" height="220"></canvas>
-  <div id="graphLegend"></div>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <h3>Stage Transition Graph</h3>
+    <span class="muted" style="font-size: 12px;">Nodes = Attack Stages &middot; Edges = Predicted Escalation Paths</span>
+  </div>
+  <canvas id="graphCanvas" height="320" style="width: 100%; border-radius: 8px;"></canvas>
+</div>
+
+<div class="grid" style="grid-template-columns: 1fr 1fr; margin-top: 16px;">
+  <div class="card">
+    <h3>Attack Graph Nodes</h3>
+    <table class="data-table">
+      <thead><tr><th>Stage</th><th>Window</th><th>Severity</th><th>Risk</th></tr></thead>
+      <tbody id="nodesTableBody"></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h3>Predicted Transitions (Edges)</h3>
+    <table class="data-table">
+      <thead><tr><th>Source</th><th>Target</th><th>Confidence Weight</th></tr></thead>
+      <tbody id="edgesTableBody"></tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
-  const graphData = {{ graph_json|tojson }};
   fetch('/api/graph').then(r => r.json()).then(g => {
     const canvas = document.getElementById('graphCanvas');
     const ctx = canvas.getContext('2d');
     const W = canvas.width = canvas.clientWidth || 900;
-    const H = canvas.height = 420;
-    const nodes = g.nodes;
-    const edges = g.edges;
-    // simple layered layout by step
+    const H = canvas.height = 320;
+    const nodes = g.nodes || [];
+    const edges = g.edges || [];
+
+    // Staggered layout with curved connections
     const pos = {};
+    const nLen = Math.max(nodes.length, 1);
+    const stepX = (W - 160) / Math.max(nLen - 1, 1);
+
     nodes.forEach((n, i) => {
+      const isEven = i % 2 === 0;
       pos[n.id] = {
-        x: i === 0 ? 60 : 60 + i * ((W - 120) / Math.max(nodes.length - 1, 1)),
-        y: H / 2,
+        x: 80 + i * stepX,
+        y: isEven ? H / 2 - 35 : H / 2 + 35,
+        node: n,
       };
     });
+
     ctx.clearRect(0, 0, W, H);
+
+    // Draw Edges
     edges.forEach(e => {
       const s = pos[e.source], t = pos[e.target];
       if (!s || !t) return;
+
+      const gradient = ctx.createLinearGradient(s.x, s.y, t.x, t.y);
+      gradient.addColorStop(0, 'rgba(52, 152, 219, 0.8)');
+      gradient.addColorStop(1, 'rgba(231, 76, 60, 0.8)');
+
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
-      ctx.lineTo(t.x, t.y);
-      ctx.strokeStyle = 'rgba(52,152,219,' + Math.min(e.weight + 0.2, 1) + ')';
-      ctx.lineWidth = 1 + e.weight * 4;
+      const cpX = (s.x + t.x) / 2;
+      const cpY = (s.y + t.y) / 2 - 25;
+      ctx.quadraticCurveTo(cpX, cpY, t.x, t.y);
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = Math.max(2, e.weight * 5);
       ctx.stroke();
+
+      // Draw arrow head
+      const angle = Math.atan2(t.y - cpY, t.x - cpX);
+      const arrowLen = 10;
+      ctx.beginPath();
+      ctx.moveTo(t.x - 30 * Math.cos(angle), t.y - 30 * Math.sin(angle));
+      ctx.lineTo(
+        t.x - 30 * Math.cos(angle) - arrowLen * Math.cos(angle - Math.PI / 6),
+        t.y - 30 * Math.sin(angle) - arrowLen * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.lineTo(
+        t.x - 30 * Math.cos(angle) - arrowLen * Math.cos(angle + Math.PI / 6),
+        t.y - 30 * Math.sin(angle) - arrowLen * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.fillStyle = '#e74c3c';
+      ctx.fill();
     });
+
+    // Draw Nodes
     nodes.forEach(n => {
       const p = pos[n.id];
-      const radius = 34;
+      const radius = 30;
+
+      // Glow circle
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius + 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(52, 152, 219, 0.15)';
+      ctx.fill();
+
+      // Node background
       ctx.beginPath();
       ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-      const hue = n.severity * 18;
-      ctx.fillStyle = `hsl(${hue},70%,50%)`;
+      ctx.fillStyle = n.risk >= 0.7 ? '#c0392b' : (n.risk >= 0.4 ? '#d35400' : '#27ae60');
       ctx.fill();
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2;
       ctx.stroke();
+
+      // Label
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(n.label, p.x, p.y + 3);
+      ctx.font = 'bold 11px -apple-system, sans-serif';
+      ctx.fillText(n.label.split(' ')[0], p.x, p.y - 2);
+      ctx.font = '10px -apple-system, sans-serif';
+      ctx.fillText((n.risk * 100).toFixed(0) + '%', p.x, p.y + 11);
+    });
+
+    // Populate Tables
+    const nBody = document.getElementById('nodesTableBody');
+    nodes.forEach(n => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${n.label}</strong></td>
+        <td>${n.window || 'Current'}</td>
+        <td><span class="badge-detector badge-${n.risk >= 0.5 ? 'danger' : 'success'}">${n.severity}</span></td>
+        <td>${(n.risk * 100).toFixed(1)}%</td>
+      `;
+      nBody.appendChild(tr);
+    });
+
+    const eBody = document.getElementById('edgesTableBody');
+    edges.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${e.source}</td>
+        <td>${e.target}</td>
+        <td><strong>${(e.weight * 100).toFixed(1)}%</strong></td>
+      `;
+      eBody.appendChild(tr);
     });
   });
 </script>

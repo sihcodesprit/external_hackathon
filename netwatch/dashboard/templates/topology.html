@@ -2,27 +2,27 @@
 {% block title %}Network Topology — NetWatch{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Network Topology</h1>
-  <p>Discovered entities and communication links — <span class="mode-badge">OBSERVED</span></p>
+  <h1>Network Topology &amp; Asset Resolution</h1>
+  <p>Discovered host entities and communication links across the monitored network.</p>
 </div>
 
-<div class="grid-2">
+<div class="grid" style="grid-template-columns: 1.2fr 1fr; gap: 16px;">
   <div class="card">
-    <h3>Entities ({{ topology.nodes|length if topology else 0 }})</h3>
+    <h3>Discovered Host Entities ({{ topology.nodes|length if topology else 0 }})</h3>
     {% if topology and topology.nodes %}
     <table class="data-table">
       <thead>
-        <tr><th>IP</th><th>Type</th><th>Criticality</th><th>Packets</th><th>Bytes</th><th>Peers</th></tr>
+        <tr><th>IP Address</th><th>Role / Type</th><th>Criticality</th><th>Packets</th><th>Peers</th><th>Action</th></tr>
       </thead>
       <tbody>
         {% for node in topology.nodes %}
-        <tr class="clickable-row" onclick="window.location='/api/entities/{{ node.entity_id }}'">
+        <tr>
           <td><strong>{{ node.ip }}</strong></td>
           <td>{{ node.entity_type }}</td>
           <td><span class="crit-badge {{ node.criticality|lower }}">{{ node.criticality }}</span></td>
           <td>{{ node.packet_count }}</td>
-          <td>{{ node.byte_count }}</td>
           <td>{{ node.degree }}</td>
+          <td><button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="inspectEntity('{{ node.entity_id }}')">Inspect</button></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -33,28 +33,69 @@
   </div>
 
   <div class="card">
-    <h3>Communication Edges ({{ topology.edges|length if topology else 0 }})</h3>
-    {% if topology and topology.edges %}
-    <table class="data-table">
-      <thead>
-        <tr><th>Source</th><th>Destination</th><th>Protocols</th><th>Packets</th><th>SYN</th><th>RST</th></tr>
-      </thead>
-      <tbody>
-        {% for edge in topology.edges %}
-        <tr>
-          <td>{{ edge.src_id|replace('entity_', '') }}</td>
-          <td>{{ edge.dst_id|replace('entity_', '') }}</td>
-          <td>{{ edge.protocols|join(', ') }}</td>
-          <td>{{ edge.packet_count }}</td>
-          <td>{{ edge.syn_count }}</td>
-          <td>{{ edge.rst_count }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="muted">No communication edges yet</p>
-    {% endif %}
+    <div id="entityInspector">
+      <h3>Entity Inspector</h3>
+      <p class="muted">Click "Inspect" on any host entity to view its communication profile and traffic history.</p>
+    </div>
   </div>
 </div>
+
+<div class="card" style="margin-top: 16px;">
+  <h3>Communication Edges ({{ topology.edges|length if topology else 0 }})</h3>
+  {% if topology and topology.edges %}
+  <table class="data-table">
+    <thead>
+      <tr><th>Source Entity</th><th>Destination Entity</th><th>Protocols</th><th>Total Packets</th><th>SYN Probes</th><th>RST Packets</th></tr>
+    </thead>
+    <tbody>
+      {% for edge in topology.edges %}
+      <tr>
+        <td><strong>{{ edge.src_id|replace('entity_', '') }}</strong></td>
+        <td><strong>{{ edge.dst_id|replace('entity_', '') }}</strong></td>
+        <td>{{ edge.protocols|join(', ') if edge.protocols is iterable else edge.protocols }}</td>
+        <td>{{ edge.packet_count }}</td>
+        <td>{{ edge.syn_count }}</td>
+        <td>{{ edge.rst_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No communication edges yet</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function inspectEntity(entityId) {
+  const panel = document.getElementById('entityInspector');
+  panel.innerHTML = '<p class="muted">Fetching entity details...</p>';
+  try {
+    const res = await fetch('/api/entities/' + entityId);
+    if (!res.ok) throw new Error('Entity not found');
+    const data = await res.json();
+    
+    panel.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; color: var(--accent);">${data.ip || entityId}</h3>
+        <span class="crit-badge ${data.criticality ? data.criticality.toLowerCase() : 'low'}">${data.criticality || 'NORMAL'}</span>
+      </div>
+      <table style="font-size: 13px;">
+        <tr><td class="muted">Entity ID:</td><td><code>${data.entity_id || entityId}</code></td></tr>
+        <tr><td class="muted">Assigned Type:</td><td><strong>${data.entity_type || 'Generic Host'}</strong></td></tr>
+        <tr><td class="muted">Total Packets:</td><td>${data.packet_count || 0} pkts</td></tr>
+        <tr><td class="muted">Total Volume:</td><td>${((data.byte_count || 0) / 1024).toFixed(1)} KB</td></tr>
+        <tr><td class="muted">Connected Peers:</td><td>${data.degree || (data.peers ? data.peers.length : 0)} hosts</td></tr>
+        <tr><td class="muted">Active Ports:</td><td>${data.ports ? data.ports.join(', ') : 'Standard'}</td></tr>
+      </table>
+      <div style="margin-top: 14px;">
+        <a href="/counterfactual" class="btn btn-primary" style="font-size: 12px;">Test Defense on Host</a>
+      </div>
+    `;
+  } catch (err) {
+    panel.innerHTML = `<p style="color: var(--danger);">Error: ${err.message}</p>`;
+  }
+}
+</script>
 {% endblock %}

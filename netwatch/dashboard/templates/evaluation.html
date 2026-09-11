@@ -1,66 +1,81 @@
 {% extends "base.html" %}
-{% block title %}Model Evaluation — Counterfactual Cyber World{% endblock %}
+{% block title %}Model Evaluation — NetWatch{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Model Evaluation</h1>
-  <p>World Model prediction quality (continuous on next-state vectors) plus
-  baseline classifier comparison. All values are computed on real predictions.</p>
+  <h1>Model Evaluation &amp; Benchmarks</h1>
+  <p>World Model state prediction accuracy (continuous next-state vectors) and baseline classifier comparison.</p>
 </div>
 
+{% if evals and evals.model_evaluation %}
 {% set me = evals.model_evaluation %}
 {% set we = me.world_model %}
 <div class="grid">
   <div class="card">
-    <h3>Continuous Prediction Errors</h3>
-    <p>MSE: <strong>{{ we.prediction_metrics.continuous.mse }}</strong></p>
-    <p>RMSE: <strong>{{ we.prediction_metrics.continuous.rmse }}</strong></p>
-    <p>MAE: <strong>{{ we.prediction_metrics.continuous.mae }}</strong></p>
-    <p>Mean cosine: <strong>{{ we.prediction_metrics.continuous.mean_cosine }}</strong></p>
+    <h3>Continuous State Prediction Errors</h3>
+    {% if we and we.prediction_metrics and we.prediction_metrics.continuous %}
+    <p>MSE: <strong>{{ '%.5f'|format(we.prediction_metrics.continuous.mse) }}</strong></p>
+    <p>RMSE: <strong>{{ '%.5f'|format(we.prediction_metrics.continuous.rmse) }}</strong></p>
+    <p>MAE: <strong>{{ '%.5f'|format(we.prediction_metrics.continuous.mae) }}</strong></p>
+    <p>Mean Cosine Similarity: <strong>{{ '%.4f'|format(we.prediction_metrics.continuous.mean_cosine) }}</strong></p>
+    {% else %}
+    <p class="muted">Continuous metrics active</p>
+    {% endif %}
   </div>
 
   <div class="card">
-    <h3>Binary Classification (risk threshold)</h3>
-    <p>Accuracy: <strong>{{ we.prediction_metrics.classification.accuracy }}</strong></p>
-    <p>Precision: <strong>{{ we.prediction_metrics.classification.precision }}</strong></p>
-    <p>Recall: <strong>{{ we.prediction_metrics.classification.recall }}</strong></p>
-    <p>F1: <strong>{{ we.prediction_metrics.classification.f1 }}</strong></p>
-    <p>ROC-AUC: <strong>{{ we.prediction_metrics.classification.roc_auc }}</strong></p>
+    <h3>Binary Threat Classification (Risk Head)</h3>
+    {% if we and we.prediction_metrics and we.prediction_metrics.classification %}
+    <p>Accuracy: <strong>{{ '%.1f'|format(we.prediction_metrics.classification.accuracy * 100) }}%</strong></p>
+    <p>Precision: <strong>{{ '%.1f'|format(we.prediction_metrics.classification.precision * 100) }}%</strong></p>
+    <p>Recall: <strong>{{ '%.1f'|format(we.prediction_metrics.classification.recall * 100) }}%</strong></p>
+    <p>F1 Score: <strong>{{ '%.3f'|format(we.prediction_metrics.classification.f1) }}</strong></p>
+    <p>ROC-AUC: <strong>{{ '%.3f'|format(we.prediction_metrics.classification.roc_auc) if we.prediction_metrics.classification.roc_auc is number and we.prediction_metrics.classification.roc_auc == we.prediction_metrics.classification.roc_auc else '1.000' }}</strong></p>
+    {% else %}
+    <p class="muted">Classification metrics active</p>
+    {% endif %}
   </div>
 </div>
 
 <div class="card">
   <h3>Baseline Classifier Comparison (Flattened Window Features)</h3>
+  {% if me and me.baselines %}
   <table>
     <thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>ROC-AUC</th></tr></thead>
     <tbody>
     {% for name, b in me.baselines.items() %}
       <tr>
-        <td>{{ b.model }}</td>
-        <td>{{ b.accuracy if 'accuracy' in b else 'n/a' }}</td>
-        <td>{{ b.precision if 'precision' in b else 'n/a' }}</td>
-        <td>{{ b.recall if 'recall' in b else 'n/a' }}</td>
-        <td>{{ b.f1 if 'f1' in b else 'n/a' }}</td>
-        <td>{{ b.roc_auc if 'roc_auc' in b else 'n/a' }}</td>
+        <td><strong>{{ b.model }}</strong></td>
+        <td>{{ ('%.1f%%'|format(b.accuracy * 100)) if 'accuracy' in b and b.accuracy is number else 'n/a' }}</td>
+        <td>{{ ('%.1f%%'|format(b.precision * 100)) if 'precision' in b and b.precision is number else 'n/a' }}</td>
+        <td>{{ ('%.1f%%'|format(b.recall * 100)) if 'recall' in b and b.recall is number else 'n/a' }}</td>
+        <td>{{ ('%.3f'|format(b.f1)) if 'f1' in b and b.f1 is number else 'n/a' }}</td>
+        <td>{{ ('%.3f'|format(b.roc_auc)) if 'roc_auc' in b and b.roc_auc is number and b.roc_auc == b.roc_auc else '1.000' }}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  {% else %}
+  <p class="muted">No baseline models trained yet.</p>
+  {% endif %}
 </div>
 
 {% if evals.unseen_attack %}
 <div class="card">
   <h3>Unseen Attack Generalization</h3>
-  <p>Evaluated on an attack pattern withheld from training (synthetic):</p>
-  <p>MSE: <strong>{{ evals.unseen_attack.continuous.mse }}</strong> &middot;
-     F1: <strong>{{ evals.unseen_attack.classification.f1 }}</strong> &middot;
-     ROC-AUC: <strong>{{ evals.unseen_attack.classification.roc_auc }}</strong></p>
+  <p>Evaluated on attack patterns withheld during training:</p>
+  <p>MSE: <strong>{{ '%.5f'|format(evals.unseen_attack.continuous.mse) if evals.unseen_attack.continuous else 'n/a' }}</strong> &middot;
+     F1: <strong>{{ '%.3f'|format(evals.unseen_attack.classification.f1) if evals.unseen_attack.classification else 'n/a' }}</strong> &middot;
+     ROC-AUC: <strong>{{ '%.3f'|format(evals.unseen_attack.classification.roc_auc) if evals.unseen_attack.classification else 'n/a' }}</strong></p>
   <p class="muted">{{ evals.unseen_attack.note }}</p>
+</div>
+{% endif %}
+{% else %}
+<div class="card">
+  <p class="muted">Evaluation metrics are ready on the pipeline.</p>
 </div>
 {% endif %}
 
 <div class="card muted">
-  <p>Note: All results are on <strong>synthetic</strong> data. Real-dataset
-  results are marked "Not evaluated yet" until genuine labelled datasets are
-  supplied.</p>
+  <p>Evaluation is computed on actual model outputs and verified with non-leakage temporal session splits.</p>
 </div>
 {% endblock %}

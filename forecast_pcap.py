@@ -20,6 +20,7 @@ from netwatch.config import ensure_dirs
 from netwatch.features.network_state import StateBuilder
 from netwatch.features.sequences import StateNormalizer, build_sequences
 from netwatch.forecasting.attack_forecaster import AttackForecaster
+from netwatch.forecasting.ensemble_scorer import EnsembleScorer
 from netwatch.forecasting.stage_predictor import StagePredictor
 from netwatch.graph.predictive_attack_graph import build_predictive_graph
 from netwatch.ingestion.parser import load_pcap
@@ -183,14 +184,35 @@ def main():
         # Run forecast
         forecast, graph = run_forecast(states, model, normalizer, args.horizon, args.sequence_length)
         
+        # Run multi-tool ensemble scoring
+        scorer = EnsembleScorer()
+        ensemble_res = scorer.evaluate_traffic(states=states, k_steps=args.horizon)
+
         # Print results
         print_forecast(forecast, graph)
         
+        if ensemble_res and "consensus" in ensemble_res:
+            c = ensemble_res["consensus"]
+            print("\n" + "=" * 70)
+            print("MULTI-TOOL THREAT SCORING & ENSEMBLE CONSENSUS")
+            print("=" * 70)
+            print(f"  Consensus Threat Score: {c['score']}% [{c['threat_level']} - {c['threat_status']}]")
+            print(f"  Detector Agreement:     {c['agreement_count']} / {c['total_detectors']} engines ({c['agreement_pct']}%)")
+            print(f"  Primary Stage (MITRE):  {c['primary_stage']} ({c['mitre'].get('technique_id', '')} - {c['mitre'].get('technique_name', '')})")
+            print(f"  Recommended Defense:    {c['recommendation']['action_label']} (-{c['recommendation']['projected_risk_reduction_pct']}% Risk)")
+            print("\n  Individual Engine Scores:")
+            for d in ensemble_res.get("detectors", []):
+                print(f"    - {d['name']:<35} : {d['score']*100:>5.1f}%  [{d['verdict']}]")
+            print("\n  Executive Summary:")
+            print(f"    {c['summary']}")
+            print("=" * 70 + "\n")
+
         # Save to file if requested
         if args.output:
             output_data = {
                 "forecast": forecast,
                 "graph": graph,
+                "ensemble": ensemble_res,
             }
             with open(args.output, "w") as f:
                 json.dump(output_data, f, indent=2, default=str)

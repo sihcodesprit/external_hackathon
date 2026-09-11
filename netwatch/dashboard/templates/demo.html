@@ -83,18 +83,23 @@
 
 <div class="card">
   <h3>Why This Prediction?</h3>
+  {% if forecast.current.explanation %}
   <p>{{ forecast.current.explanation.summary }}</p>
   <ul>
   {% for feat in forecast.current.explanation.top_features %}
     <li>{{ feat.feature.replace('_', ' ').title() }} ({{ feat.sign }}{{ feat.contribution }})</li>
   {% endfor %}
   </ul>
+  {% else %}
+  <p class="muted">Feature attribution active.</p>
+  {% endif %}
 </div>
 
 <div class="card">
   <h3>Interactive Controls</h3>
-  <button class="btn btn-primary" onclick="runCustomScenario()">Simulate Custom Scenario</button>
-  <button class="btn btn-secondary" onclick="showAttackGraph()">View Attack Graph</button>
+  <a href="/scenarios" class="btn btn-primary">Simulate Custom Scenario</a>
+  <a href="/graph" class="btn btn-secondary">View Attack Graph</a>
+  <a href="/ensemble" class="btn btn-secondary">Ensemble Threat Scorer</a>
   <a href="{{ url_for('upload') }}" class="btn btn-secondary">Upload Your Own Data</a>
 </div>
 {% endblock %}
@@ -144,6 +149,7 @@
   
   // Counterfactual chart from simulation data
   fetch('/api/counterfactual').then(r => r.json()).then(data => {
+    if (!data.results) return;
     const labels = Object.keys(data.results).map(k => data.results[k].label);
     const finals = Object.keys(data.results).map(k => data.results[k].final_risk);
     const peaks = Object.keys(data.results).map(k => data.results[k].peak_risk);
@@ -162,23 +168,5 @@
       },
     });
   });
-  
-  function runCustomScenario() {
-    const k = prompt("Forecast horizon (steps):", "5");
-    if (!k) return;
-    
-    fetch('/api/scenario', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ k: parseInt(k) })
-    }).then(r => r.json()).then(data => {
-      alert(`Custom scenario complete. Recommended: ${data.recommendation.recommended_label}`);
-      location.reload();
-    });
-  }
-  
-  function showAttackGraph() {
-    window.open('/graph', '_blank');
-  }
 </script>
 {% endblock %}

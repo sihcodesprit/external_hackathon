@@ -26,6 +26,8 @@ from flask import Flask, jsonify, render_template, request, flash, redirect, url
 
 from netwatch import __version__
 from netwatch.config import DASHBOARD_DEBUG, DASHBOARD_PORT, DASHBOARD_HOST
+from netwatch.features.network_state import StateBuilder
+from netwatch.forecasting.ensemble_scorer import EnsembleScorer
 from netwatch.ingestion.parser import ingest
 from netwatch.pipeline import Pipeline
 
@@ -95,6 +97,11 @@ def _process_uploaded_file(file, file_type: str) -> dict:
                 step["explanation"] = pipe.explainer.explain(step["state_vec"], step["features"])
             forecast["current"]["explanation"] = pipe.explainer.explain(
                 forecast["current"]["state_vec"], forecast["current"]["features"])
+            
+            # Run multi-tool ensemble scoring
+            scorer = EnsembleScorer(pipeline=pipe)
+            ensemble_res = scorer.evaluate_traffic(records=records, states=states, k_steps=5)
+
             return {
                 "status": "ok",
                 "n_records": len(records),
@@ -103,6 +110,7 @@ def _process_uploaded_file(file, file_type: str) -> dict:
                 "graph": graph,
                 "counterfactual": {**sim, "recommendation": rec},
                 "mitre_trajectory": mitre,
+                "ensemble": ensemble_res,
             }
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -136,12 +144,15 @@ def create_app():
     @app.route("/dashboard")
     def dashboard():
         pipe = _build_pipeline()
-        forecast = pipe.results["forecast"]
-        current = forecast["forecast"]["current"]
-        rec = forecast["counterfactual"]["recommendation"]
-        topology = forecast.get("network_topology", {})
-        entities = forecast.get("entity_summary", {})
-        forecast_steps = forecast.get("future", [])
+        forecast_data = pipe.results.get("forecast", {})
+        fc = forecast_data.get("forecast", {})
+        current = fc.get("current", {"risk": 0.0, "stage": "Benign", "confidence": 0.0})
+        rec = forecast_data.get("counterfactual", {}).get("recommendation", {
+            "recommended_label": "No Action", "reason": "System operating normally", "risk_reduction_pct_points": 0.0
+        })
+        topology = forecast_data.get("network_topology", {})
+        entities = forecast_data.get("entity_summary", {})
+        forecast_steps = fc.get("future", [])
         return render_template("dashboard.html", version=__version__,
                                current=current, recommendation=rec,
                                topology=topology, entities=entities,
@@ -222,6 +233,39 @@ def create_app():
                                    result=result, filename=file.filename)
         return render_template("upload.html", version=__version__)
 
+    @app.route("/ensemble", methods=["GET", "POST"])
+    def ensemble():
+        pipe = _build_pipeline()
+        scorer = EnsembleScorer(pipeline=pipe)
+        
+        if request.method == "POST":
+            if "file" not in request.files or request.files["file"].filename == "":
+                flash("No file selected")
+                return redirect(request.url)
+            file = request.files["file"]
+            file_type = request.form.get("file_type", "auto")
+            if file_type == "auto":
+                if file.filename.lower().endswith((".pcap", ".pcapng")):
+                    file_type = "pcap"
+                elif file.filename.lower().endswith(".csv"):
+                    file_type = "csv"
+                else:
+                    file_type = "jsonl"
+            result = _process_uploaded_file(file, file_type)
+            if "error" in result:
+                flash(f"Error: {result['error']}")
+                return redirect(request.url)
+            return render_template("ensemble.html", version=__version__,
+                                   ensemble=result.get("ensemble"), filename=file.filename,
+                                   is_uploaded=True)
+        
+        # Default: evaluate active pipeline traffic states
+        states = getattr(pipe, "states", [])
+        ensemble_results = scorer.evaluate_traffic(states=states, k_steps=5)
+        return render_template("ensemble.html", version=__version__,
+                               ensemble=ensemble_results, filename="Active Pipeline Replay Data",
+                               is_uploaded=False)
+
     @app.route("/demo")
     def demo():
         pipe = _build_pipeline()
@@ -236,6 +280,13 @@ def create_app():
         return render_template("scenarios.html", version=__version__)
 
     # ── JSON API ────────────────────────────────────────────
+    @app.route("/api/ensemble")
+    def api_ensemble():
+        pipe = _build_pipeline()
+        scorer = EnsembleScorer(pipeline=pipe)
+        states = getattr(pipe, "states", [])
+        return jsonify(scorer.evaluate_traffic(states=states, k_steps=5))
+
     @app.route("/api/forecast")
     def api_forecast():
         pipe = _build_pipeline()

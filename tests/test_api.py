@@ -11,10 +11,12 @@ from netwatch.dashboard.app import app
 PAGE_ROUTES = [
     "/dashboard", "/radar", "/graph", "/counterfactual",
     "/stages", "/explainability", "/evaluation", "/scenarios",
+    "/ensemble",
 ]
 
 API_ROUTES = [
     "/api/forecast", "/api/graph", "/api/counterfactual", "/api/evaluation",
+    "/api/ensemble",
 ]
 
 

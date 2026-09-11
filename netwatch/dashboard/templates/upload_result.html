@@ -6,6 +6,79 @@
   <p>File: <strong>{{ filename }}</strong> — {{ result.n_records }} records, {{ result.n_states }} network states</p>
 </div>
 
+{% if result.ensemble %}
+<!-- ── Ensemble Scoring Consensus Card ────────────────────────── -->
+<div class="card" style="border-left: 5px solid {% if result.ensemble.consensus.verdict_badge == 'critical' or result.ensemble.consensus.verdict_badge == 'danger' %}var(--danger){% elif result.ensemble.consensus.verdict_badge == 'high' or result.ensemble.consensus.verdict_badge == 'warning' %}#e67e22{% else %}var(--good){% endif %}; margin-bottom: 20px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+    <h3 style="margin: 0; color: var(--text);">Ensemble Threat Consensus</h3>
+    <span class="badge-level badge-{{ result.ensemble.consensus.verdict_badge }}" style="font-size: 14px; padding: 4px 12px;">
+      {{ result.ensemble.consensus.threat_level }} &middot; {{ result.ensemble.consensus.threat_status }}
+    </span>
+  </div>
+
+  <div class="grid" style="grid-template-columns: 140px 1fr 1fr; align-items: center; gap: 20px;">
+    <!-- Consensus Gauge -->
+    <div style="text-align: center;">
+      <div class="risk-gauge" style="--risk: {{ '%.2f'|format(result.ensemble.consensus.score_raw) }}; --hue: {{ (1.0 - result.ensemble.consensus.score_raw) * 120 }}; width: 120px; height: 120px; margin: 0 auto;">
+        <span class="gauge-value" style="font-size: 24px; font-weight: 800;">{{ result.ensemble.consensus.score }}%</span>
+      </div>
+      <small class="muted">Consensus Score</small>
+    </div>
+
+    <!-- Agreement & MITRE -->
+    <div>
+      <div style="font-size: 13px; color: var(--muted); margin-bottom: 4px;">Engine Agreement</div>
+      <div style="font-size: 20px; font-weight: 700; color: var(--accent);">
+        {{ result.ensemble.consensus.agreement_count }} / {{ result.ensemble.consensus.total_detectors }} Engines
+      </div>
+      <div class="progress-bar-container" style="background: var(--panel-2); height: 6px; border-radius: 3px; overflow: hidden; margin: 6px 0 10px;">
+        <div style="width: {{ result.ensemble.consensus.agreement_pct }}%; height: 100%; background: {% if result.ensemble.consensus.agreement_pct >= 60 %}var(--danger){% else %}var(--good){% endif %};"></div>
+      </div>
+      <div style="font-size: 12px; color: var(--text);">
+        Primary Stage: <strong>{{ result.ensemble.consensus.primary_stage }}</strong> ({{ result.ensemble.consensus.mitre.technique_id }})
+      </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div style="background: var(--panel-2); padding: 10px 14px; border-radius: 8px; font-size: 12.5px; line-height: 1.5;">
+      {{ result.ensemble.consensus.summary }}
+    </div>
+  </div>
+
+  <!-- Multi-Detector Breakdown Table -->
+  <h4 style="margin: 16px 0 8px; font-size: 14px; color: var(--accent);">Multi-Script Detector Breakdown (8 Engines)</h4>
+  <table>
+    <thead>
+      <tr>
+        <th>Detection Engine</th>
+        <th>Category</th>
+        <th>Threat Score</th>
+        <th>Verdict</th>
+        <th>Key Evidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in result.ensemble.detectors %}
+      <tr>
+        <td><strong>{{ d.name }}</strong></td>
+        <td class="muted">{{ d.category }}</td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 60px; background: var(--panel-2); height: 6px; border-radius: 3px; overflow: hidden;">
+              <div style="width: {{ '%.0f'|format(d.score * 100) }}%; height: 100%; background: {% if d.score >= 0.5 %}var(--danger){% else %}var(--good){% endif %};"></div>
+            </div>
+            <span>{{ '%.0f'|format(d.score * 100) }}%</span>
+          </div>
+        </td>
+        <td><span class="badge-detector badge-{{ d.badge }}">{{ d.verdict }}</span></td>
+        <td class="muted" style="font-size: 12px;">{{ d.details }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 <div class="grid">
   <div class="card">
     <h3>Current Risk</h3>
