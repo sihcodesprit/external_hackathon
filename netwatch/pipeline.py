@@ -155,6 +155,41 @@ class Pipeline:
             "n_graph_edges": len(self.network_graph.edges),
         }
 
+    def load_pretrained(self, model_path: Optional[str] = None,
+                        scaler_path: Optional[str] = None) -> bool:
+        """Load pre-trained LSTM World Model and Feature Scaler from disk without training."""
+        m_path = Path(model_path) if model_path else WORLD_MODEL_PATH
+        s_path = Path(scaler_path) if scaler_path else SCALER_PATH
+
+        if not m_path.exists() or not s_path.exists():
+            return False
+
+        try:
+            self.normalizer.load(s_path)
+            self.trainer = WorldModelTrainer(
+                model_type=WORLD_MODEL_TYPE, n_features=N_FEATURES)
+            self.trainer.load(str(m_path))
+
+            self.attack_forecaster = AttackForecaster(
+                self.trainer.model, self.normalizer, self.stage_predictor,
+                feature_columns=self.feature_columns)
+
+            if hasattr(self, "states") and self.states:
+                self.attack_forecaster.fit_risk_head(self.states)
+                self.explainer = ShapExplainer(
+                    risk_model=self.attack_forecaster.risk_model
+                    if self.attack_forecaster._risk_trained else None,
+                    feature_columns=self.feature_columns, normalizer=self.normalizer)
+                self.temporal_explainer = TemporalExplainer(
+                    shap_explainer=self.explainer,
+                    feature_columns=self.feature_columns)
+
+            logger.info(f"Loaded pre-trained Cyber World Model from {m_path}")
+            return True
+        except Exception as e:
+            logger.warning(f"Could not load pre-trained model: {e}")
+            return False
+
     # ── II. train ──────────────────────────────────────────
     def train(self) -> Dict:
         if not hasattr(self, "states") or not self.states:

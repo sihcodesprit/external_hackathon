@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 _pipeline_cache = {}
 _pipeline_lock = threading.Lock()
 
-ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".csv", ".jsonl"}
+ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".csv", ".jsonl", ".zip"}
 MAX_FILE_SIZE = 100 * 1024 * 1024
 
 
@@ -47,12 +47,21 @@ def _build_pipeline(force_retrain: bool = False) -> Pipeline:
         cache_key = "default"
         if cache_key in _pipeline_cache and not force_retrain:
             return _pipeline_cache[cache_key]
-        logger.info("Initializing pipeline (world model training)...")
+
+        logger.info("Initializing pipeline (loading data & models)...")
         pipe = Pipeline()
-        data_info = pipe.load_data(n_traces=4, seed=42)
-        train_info = pipe.train()
-        eval_info = pipe.evaluate()
-        forecast_info = pipe.forecast_and_simulate()
+        pipe.load_data(n_traces=2, seed=42)
+
+        loaded = False
+        if not force_retrain:
+            loaded = pipe.load_pretrained()
+
+        if not loaded:
+            logger.info("No pre-trained weights found or retrain forced; fitting fast baseline...")
+            pipe.train()
+            pipe.evaluate()
+
+        pipe.forecast_and_simulate()
         logger.info("Pipeline ready.")
         _pipeline_cache[cache_key] = pipe
         return pipe
@@ -69,6 +78,62 @@ def _process_uploaded_file(file, file_type: str) -> dict:
         filename = secure_filename(file.filename)
         if not _allowed_file(filename):
             return {"error": f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"}
+
+        suffix = Path(filename).suffix.lower()
+
+        # ── Handle .zip Model Bundle Upload ───────────────────
+        if suffix == ".zip":
+            import zipfile
+            import shutil
+            from netwatch.config import MODEL_DIR
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+                file.save(tmp.name)
+                tmp_path = Path(tmp.name)
+                
+            try:
+                extract_temp = Path(tempfile.mkdtemp(prefix="nw_model_upload_"))
+                with zipfile.ZipFile(tmp_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_temp)
+
+                data_models_dir = Path("data/data/models")
+                data_models_dir.mkdir(parents=True, exist_ok=True)
+                checkpoints_dir = Path("models/checkpoints")
+                checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+                installed = []
+                for root, _, files in os.walk(extract_temp):
+                    for f in files:
+                        if f.endswith(('.pt', '.pkl', '.json', '.npz')):
+                            src_file = Path(root) / f
+                            shutil.copy2(src_file, data_models_dir / f)
+                            if f in ("world_model_lstm.pt", "registry.json", "feature_scaler.pkl", "ensemble_baselines.pkl"):
+                                shutil.copy2(src_file, checkpoints_dir / f)
+                            installed.append(f)
+
+                shutil.rmtree(extract_temp, ignore_errors=True)
+
+                # Invalidate in-memory pipeline cache so new models load
+                global _pipeline_cache
+                with _pipeline_lock:
+                    _pipeline_cache.clear()
+
+                if not installed:
+                    return {"error": "No valid model artifacts (.pt, .pkl, .json) found in zip file."}
+
+                logger.info(f"Imported {len(installed)} model files from uploaded zip: {installed}")
+                return {
+                    "status": "ok",
+                    "type": "model_package",
+                    "filename": filename,
+                    "n_models": len(installed),
+                    "files": installed,
+                    "message": f"Successfully imported and activated {len(installed)} model files from {filename}."
+                }
+            finally:
+                tmp_path.unlink(missing_ok=True)
+
+        # ── Handle Network Traffic Ingestion (PCAP / CSV / JSONL) ──
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp:
             file.save(tmp.name)
             tmp_path = Path(tmp.name)
@@ -104,6 +169,7 @@ def _process_uploaded_file(file, file_type: str) -> dict:
 
             return {
                 "status": "ok",
+                "type": "traffic_data",
                 "n_records": len(records),
                 "n_states": len(states),
                 "forecast": forecast,

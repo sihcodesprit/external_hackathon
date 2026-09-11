@@ -2,9 +2,39 @@
 {% block title %}Upload Results — Counterfactual Cyber World{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Analysis Results</h1>
-  <p>File: <strong>{{ filename }}</strong> — {{ result.n_records }} records, {{ result.n_states }} network states</p>
+  <h1>Analysis & Ingestion Results</h1>
+  {% if result.type == 'model_package' %}
+    <p>Model Package: <strong>{{ filename }}</strong> &middot; Installed <strong>{{ result.n_models }}</strong> model artifacts</p>
+  {% else %}
+    <p>File: <strong>{{ filename }}</strong> &mdash; {{ result.n_records }} records, {{ result.n_states }} network states</p>
+  {% endif %}
 </div>
+
+{% if result.type == 'model_package' %}
+<!-- ── Model Package Success Banner ──────────────────────────── -->
+<div class="card" style="border-left: 5px solid var(--good); background: rgba(46, 204, 113, 0.08); margin-bottom: 24px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+    <h3 style="margin: 0; color: var(--good); font-size: 20px;">
+      ✓ Trained Models Successfully Installed & Activated!
+    </h3>
+    <span class="badge-level badge-good" style="font-size: 13px; padding: 4px 12px;">Models Ready</span>
+  </div>
+  <p style="color: var(--text); margin-bottom: 16px;">
+    {{ result.message }}
+  </p>
+  <h4 style="margin: 12px 0 8px; font-size: 14px; color: var(--accent);">Installed Artifacts:</h4>
+  <ul style="margin: 0 0 16px 20px; color: var(--text);">
+    {% for f in result.files %}
+      <li style="margin-bottom: 4px;"><code>{{ f }}</code></li>
+    {% endfor %}
+  </ul>
+  <div style="display: flex; gap: 12px; margin-top: 16px;">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Open SOC Dashboard</a>
+    <a href="{{ url_for('ensemble') }}" class="btn btn-secondary">Open Ensemble Scorer</a>
+    <a href="{{ url_for('test_center') }}" class="btn btn-secondary">Run Model Test Suite</a>
+  </div>
+</div>
+{% endif %}
 
 {% if result.ensemble %}
 <!-- ── Ensemble Scoring Consensus Card ────────────────────────── -->

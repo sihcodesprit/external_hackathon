@@ -11,21 +11,22 @@
   <form method="POST" enctype="multipart/form-data" id="uploadForm">
     <div class="form-group">
       <label for="file">Select File</label>
-      <input type="file" name="file" id="file" accept=".pcap,.pcapng,.csv,.jsonl" required>
-      <small class="form-text">Max file size: 100MB. Supported formats: PCAP/PCAPNG, CSV, JSONL</small>
+      <input type="file" name="file" id="file" accept=".pcap,.pcapng,.csv,.jsonl,.zip" required>
+      <small class="form-text">Max file size: 100MB. Supported formats: PCAP/PCAPNG, CSV, JSONL, or Trained Models (<code>.zip</code>)</small>
     </div>
     
     <div class="form-group">
       <label for="file_type">File Type</label>
       <select name="file_type" id="file_type">
         <option value="auto">Auto-detect</option>
-        <option value="pcap">PCAP / PCAPNG</option>
-        <option value="csv">CSV (flow records)</option>
-        <option value="jsonl">JSONL (packet records)</option>
+        <option value="pcap">PCAP / PCAPNG (Network Traffic)</option>
+        <option value="csv">CSV (Flow Records)</option>
+        <option value="jsonl">JSONL (Packet Records)</option>
+        <option value="zip">ZIP (Trained Model Bundle)</option>
       </select>
     </div>
     
-    <button type="submit" class="btn btn-primary">Analyze</button>
+    <button type="submit" class="btn btn-primary">Upload & Process</button>
   </form>
 </div>
 
