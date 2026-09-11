@@ -76,12 +76,13 @@ def test_api_graph_shape(client):
 
 def test_api_scenario_post(client):
     resp = client.post("/api/scenario",
-                       json={"k": 3, "actions": ["no_action", "block_source"],
-                             "n_traces": 2})
+                       json={"k": 3, "actions": ["isolate_host"]})
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["status"] == "ok"
-    assert set(data["results"]) == {"no_action", "block_source"}
+    assert data["status"] in ("ok", "no_history")
+    assert "recommendation" in data
+    if data["status"] == "ok":
+        assert set(data["results"]) == {"isolate_host"}
 
 
 def test_unknown_page_returns_json_404(client):

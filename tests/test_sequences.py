@@ -12,7 +12,6 @@ from netwatch.features.sequences import (
     split_by_group,
     temporal_split,
 )
-from netwatch.ingestion.synthetic import generate_trace
 
 
 def _baseline_states(n=20):
@@ -27,16 +26,13 @@ def _baseline_states(n=20):
                       "unique_dst_hosts": 1.0, "syn_rate": 0.1,
                       "ack_rate": 4.0, "rst_rate": 0.0,
                       "syn_ack_ratio": 0.1, "port_entropy": 1.0},
-            label=0, stage="Benign"))
+            label=0 if i < 15 else 1, stage="Benign" if i < 15 else "Reconnaissance"))
     return states
 
 
 @pytest.fixture()
 def norm_states():
-    from netwatch.pipeline import Pipeline
-    pipe = Pipeline()
-    pipe.load_data(n_traces=2, seed=7, duration_minutes=60)
-    return pipe.states
+    return _baseline_states(30)
 
 
 def test_normalizer_zero_variance_guard():

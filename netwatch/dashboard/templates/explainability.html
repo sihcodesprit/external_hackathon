@@ -8,12 +8,16 @@
 
 <div class="card">
   <h3>Current State — {{ forecast.current.stage }} (risk {{ '%.0f'|format(forecast.current.risk*100) }}%)</h3>
+  {% if forecast.current.explanation %}
   <p>{{ forecast.current.explanation.summary }}</p>
   <ul class="contrib-list">
   {% for c in forecast.current.explanation.top_features %}
     <li><code>{{ c.feature }}</code> <span class="contribution {{ c.sign }}">{{ c.sign }} {{ c.contribution }}</span></li>
   {% endfor %}
   </ul>
+  {% else %}
+  <p class="muted">No network capture currently loaded. Upload a PCAP/CSV file to generate SHAP feature attribution.</p>
+  {% endif %}
 </div>
 
 <div class="card">

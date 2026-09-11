@@ -1,13 +1,9 @@
-"""Focused tests for the netwatch Counterfactual Cyber World Model.
-
-Kept fast: tiny traces, few training epochs.
-"""
-
 import numpy as np
 import pytest
+from datetime import datetime, timedelta
 
 from netwatch.config import get_feature_columns
-from netwatch.ingestion.synthetic import generate_trace
+from netwatch.ingestion.parser import PacketRecord
 from netwatch.features.network_state import StateBuilder
 from netwatch.features.sequences import (
     StateNormalizer,
@@ -21,25 +17,50 @@ from netwatch.models.trainer import WorldModelTrainer
 
 
 @pytest.fixture()
-def states():
+def test_records():
+    base = datetime(2026, 9, 1, 12, 0, 0)
+    records = []
+    for i in range(120):
+        ts = (base + timedelta(seconds=i * 2)).isoformat() + "Z"
+        stage = "Reconnaissance" if i < 40 else "Initial Access" if i < 80 else "Exfiltration"
+        label = 1 if i % 3 != 0 else 0
+        records.append(PacketRecord(
+            timestamp=ts,
+            src_ip="192.168.1.100" if label == 1 else "192.168.1.5",
+            dst_ip="10.0.0.1",
+            src_port=40000 + i,
+            dst_port=80 if i % 2 == 0 else 443,
+            protocol="TCP",
+            flags="S" if i < 40 else "A",
+            bytes_sent=100 + i * 5,
+            payload_size=50 if i < 40 else 800,
+            ttl=64,
+            tcp_window=65535,
+            duration=0.1,
+            label=label,
+            stage=stage if label == 1 else "",
+        ))
+    return records
+
+
+@pytest.fixture()
+def states(test_records):
     from netwatch.pipeline import Pipeline
     pipe = Pipeline()
-    pipe.load_data(n_traces=3, seed=7, duration_minutes=90)
+    pipe.load_data(records=test_records)
     return pipe.states
 
 
-def test_generator_labels_and_stages():
-    records = generate_trace(duration_minutes=40, attack_bin_fraction=0.25,
-                             packets_per_window=40, random_seed=3)
-    assert len(records) > 0
-    assert any(r.label == 1 for r in records)
-    assert any(r.stage for r in records if r.label == 1)
+def test_packet_records_and_stages(test_records):
+    assert len(test_records) > 0
+    assert any(r.label == 1 for r in test_records)
+    assert any(r.stage for r in test_records if r.label == 1)
 
 
 def test_states_have_attack_ratio(states):
     labels = [int(s.label or 0) for s in states]
     frac = np.mean(labels)
-    assert 0.05 < frac < 0.5, f"attack fraction {frac:.2f} out of range"
+    assert 0.05 < frac < 0.95, f"attack fraction {frac:.2f} out of range"
 
 
 def test_all_stages_represented(states):

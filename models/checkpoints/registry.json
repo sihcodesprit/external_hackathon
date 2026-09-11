@@ -685,6 +685,62 @@
       },
       "config": {},
       "checkpoint_path": "/mnt/sda4/projects/_notmystuffs/external_hackathon/data/data/models/world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "pcap",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-11T13:56:14.712910",
+      "metrics": {
+        "train_loss": 0.1903499737381935,
+        "val_loss": 1.7620705366134644
+      },
+      "config": {},
+      "checkpoint_path": "/mnt/sda4/projects/_notmystuffs/external_hackathon/data/data/models/world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "pcap",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-11T14:00:13.561306",
+      "metrics": {
+        "train_loss": 0.19917169958353043,
+        "val_loss": 1.812869906425476
+      },
+      "config": {},
+      "checkpoint_path": "/mnt/sda4/projects/_notmystuffs/external_hackathon/data/data/models/world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "pcap",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-11T14:12:09.554155",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "/mnt/sda4/projects/_notmystuffs/external_hackathon/data/data/models/world_model_lstm.pt"
+    },
+    {
+      "name": "lstm_world_model",
+      "version": "2.0",
+      "dataset": "pcap",
+      "feature_count": 132,
+      "sequence_length": 10,
+      "created_at": "2026-09-11T14:12:09.898539",
+      "metrics": {
+        "train_loss": null,
+        "val_loss": null
+      },
+      "config": {},
+      "checkpoint_path": "/mnt/sda4/projects/_notmystuffs/external_hackathon/data/data/models/world_model_lstm.pt"
     }
   ]
 }

@@ -48,21 +48,11 @@ def _build_pipeline(force_retrain: bool = False) -> Pipeline:
         if cache_key in _pipeline_cache and not force_retrain:
             return _pipeline_cache[cache_key]
 
-        logger.info("Initializing pipeline (loading data & models)...")
+        logger.info("Initializing pipeline (loading pre-trained models)...")
         pipe = Pipeline()
-        pipe.load_data()
-
-        loaded = False
-        if not force_retrain:
-            loaded = pipe.load_pretrained()
-
-        if not loaded:
-            logger.info("No pre-trained weights found or retrain forced; fitting fast baseline...")
-            pipe.train()
-            pipe.evaluate()
-
+        pipe.load_pretrained()
         pipe.forecast_and_simulate()
-        logger.info("Pipeline ready.")
+        logger.info("Pipeline ready (zero-data state; awaiting user capture uploads).")
         _pipeline_cache[cache_key] = pipe
         return pipe
 
@@ -334,11 +324,7 @@ def create_app():
 
     @app.route("/demo")
     def demo():
-        pipe = _build_pipeline()
-        forecast = pipe.results["forecast"]["forecast"]
-        sim = pipe.results["forecast"]["counterfactual"]
-        return render_template("demo.html", version=__version__,
-                               forecast=forecast, simulation=sim)
+        return redirect(url_for("dashboard"))
 
     @app.route("/scenarios")
     def scenarios():

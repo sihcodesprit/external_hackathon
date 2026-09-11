@@ -19,9 +19,34 @@ from netwatch.pipeline import Pipeline
 
 @pytest.fixture()
 def pipe(monkeypatch):
+    from datetime import datetime, timedelta
+    from netwatch.ingestion.parser import PacketRecord
     monkeypatch.setattr(pipeline_mod, "WORLD_MODEL_TYPE", "linear")
     pipe = Pipeline()
-    data_info = pipe.load_data(n_traces=2, seed=42, duration_minutes=60)
+    
+    base = datetime(2026, 9, 1, 12, 0, 0)
+    records = []
+    for i in range(160):
+        ts = (base + timedelta(seconds=i * 2)).isoformat() + "Z"
+        stage = "Reconnaissance" if i < 50 else "Initial Access" if i < 100 else "Exfiltration"
+        label = 1 if i % 2 == 0 else 0
+        records.append(PacketRecord(
+            timestamp=ts,
+            src_ip="192.168.1.100" if label == 1 else "192.168.1.5",
+            dst_ip="10.0.0.1",
+            src_port=40000 + i,
+            dst_port=80 if i % 2 == 0 else 443,
+            protocol="TCP",
+            flags="S" if i < 50 else "A",
+            bytes_sent=100 + i * 5,
+            payload_size=50 if i < 50 else 800,
+            ttl=64,
+            tcp_window=65535,
+            duration=0.1,
+            label=label,
+            stage=stage if label == 1 else "",
+        ))
+    data_info = pipe.load_data(records=records)
     assert data_info["n_states"] > 0
     return pipe
 

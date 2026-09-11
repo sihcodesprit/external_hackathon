@@ -1,9 +1,8 @@
 """
-Ingestion package: parse PCAP/CSV/JSONL telemetry and generate synthetic traffic.
+Ingestion package: parse PCAP/CSV/JSONL telemetry.
 
 Modules:
 - parser: PCAP/CSV/JSONL ingestion
-- synthetic: Synthetic traffic generator
 - dataset_levels: Dataset complexity levels (Level 1-6)
 - datasets.adapters: Public dataset adapters (CIC-IDS, CTU-13, UNSW-NB15, CICIoT)
 """
@@ -16,7 +15,6 @@ from netwatch.ingestion.parser import (
     ingest,
     iter_records,
 )
-from netwatch.ingestion.synthetic import generate_trace, save_records
 from netwatch.ingestion.dataset_levels import (
     DatasetLevel,
     DATASET_LEVELS,
@@ -33,8 +31,6 @@ __all__ = [
     "load_packets_jsonl",
     "ingest",
     "iter_records",
-    "generate_trace",
-    "save_records",
     "DatasetLevel",
     "DATASET_LEVELS",
     "get_level",

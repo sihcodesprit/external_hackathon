@@ -13,12 +13,13 @@
       <tr><th>Window</th><th>Stage</th><th>MITRE Tactic</th><th>Technique</th><th>Stage Prob.</th></tr>
     </thead>
     <tbody>
+      {% if mitre and mitre|length > 0 %}
       <tr>
         <td>current</td>
         <td>{{ forecast.current.stage }}</td>
         <td>{{ mitre[0].tactic }}</td>
         <td>{{ mitre[0].technique_id }} {{ mitre[0].technique_name }}</td>
-        <td>{{ '%.2f'|format(forecast.current.stage_probability) }}</td>
+        <td>{{ '%.2f'|format(forecast.current.stage_probability|default(0.0)) }}</td>
       </tr>
       {% for step, m in zip(forecast.future, mitre[1:]) %}
       <tr>
@@ -26,9 +27,14 @@
         <td>{{ step.stage }}</td>
         <td>{{ m.tactic }}</td>
         <td>{{ m.technique_id }} {{ m.technique_name }}</td>
-        <td>{{ '%.2f'|format(step.stage_probability) }}</td>
+        <td>{{ '%.2f'|format(step.stage_probability|default(0.0)) }}</td>
       </tr>
       {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="5" class="muted" style="text-align: center; padding: 20px;">No network capture currently loaded. Upload a PCAP/CSV file to map stages.</td>
+      </tr>
+      {% endif %}
     </tbody>
   </table>
 </div>

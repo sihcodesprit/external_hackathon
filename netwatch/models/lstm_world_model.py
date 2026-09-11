@@ -187,10 +187,10 @@ class LSTMWorldModel(WorldModel):
 
     def load(self, path: str) -> bool:
         import os
-        if not os.path.exists(path):
-            logger.warning(f"No world model at {path}")
-            return False
-        ckpt = torch.load(path, map_location=self.device)
+        try:
+            ckpt = torch.load(path, map_location=self.device, weights_only=False)
+        except TypeError:
+            ckpt = torch.load(path, map_location=self.device)
         self.model = LSTMNextState(
             ckpt["n_features"],
             ckpt["hidden_size"],

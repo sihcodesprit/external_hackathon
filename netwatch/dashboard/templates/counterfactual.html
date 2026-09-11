@@ -12,8 +12,8 @@
   <div class="stage-badge action">{{ simulation.recommendation.recommended_label }}</div>
   <p>{{ simulation.recommendation.reason }}</p>
   <p class="muted">
-    Baseline risk: {{ '%.0f'|format(simulation.recommendation.baseline_risk*100) }}%
-    &rarr; After action: {{ '%.0f'|format(simulation.recommendation.counterfactual_risk*100) }}%
+    Baseline risk: {{ '%.0f'|format(simulation.recommendation.baseline_risk|default(0.0)*100) }}%
+    &rarr; After action: {{ '%.0f'|format(simulation.recommendation.counterfactual_risk|default(0.0)*100) }}%
   </p>
 </div>
 

@@ -11,7 +11,7 @@
   </div>
 </div>
 
-{% if ensemble %}
+{% if ensemble and ensemble.consensus %}
 <!-- ── Consensus Verdict Hero Banner ──────────────────────── -->
 <div class="grid" style="grid-template-columns: 1fr 1fr 1.2fr; margin-bottom: 20px;">
   <!-- Threat Score & Level Card -->
@@ -158,6 +158,11 @@
     </div>
   </div>
   {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 40px 20px; margin-bottom: 20px;">
+  <h2 style="color: var(--accent); margin-bottom: 8px;">Awaiting Network Capture Upload</h2>
+  <p style="color: var(--muted); max-width: 600px; margin: 0 auto 16px;">No network capture is currently loaded. Select and upload a <code>.pcap</code>, <code>.pcapng</code>, or <code>.csv</code> file below to run all 8 detection engines and calculate consensus threat scores.</p>
 </div>
 {% endif %}
 
