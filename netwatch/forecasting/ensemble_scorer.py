@@ -37,7 +37,7 @@ class EnsembleScorer:
     """Ensemble evaluation engine combining deep learning, classical ML,
     information-theoretic entropy, protocol dynamics, and graph topology."""
 
-    def __init__(self, pipeline: Optional[Any] = None):
+    def __init__(self, pipeline: Optional[Any] = None, baselines_path: Optional[str] = None):
         self.pipeline = pipeline
         self.stage_predictor = StagePredictor()
         self.attack_mapper = AttackMapper()
@@ -47,8 +47,54 @@ class EnsembleScorer:
         self._scaler = StandardScaler()
         self._ml_trained = False
         
-        if pipeline and hasattr(pipeline, "states") and pipeline.states:
+        # Try loading saved baselines if path provided or default exists
+        if baselines_path:
+            self.load_baselines(baselines_path)
+        else:
+            from netwatch.config import MODEL_DIR
+            default_path = MODEL_DIR / "ensemble_baselines.pkl"
+            if default_path.exists():
+                self.load_baselines(str(default_path))
+
+        if not self._ml_trained and pipeline and hasattr(pipeline, "states") and pipeline.states:
             self._train_ml_baselines(pipeline.states)
+
+    def save_baselines(self, path: str):
+        """Save trained ML baseline models and scaler to disk."""
+        import pickle
+        from pathlib import Path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "rf": self._rf_model,
+            "gbm": self._gbm_model,
+            "lr": self._lr_model,
+            "scaler": self._scaler,
+            "ml_trained": self._ml_trained,
+        }
+        with open(path, "wb") as f:
+            pickle.dump(payload, f)
+        logger.info(f"Saved ensemble ML baselines to {path}")
+
+    def load_baselines(self, path: str) -> bool:
+        """Load trained ML baseline models from disk."""
+        import pickle
+        from pathlib import Path
+        p = Path(path)
+        if not p.exists():
+            return False
+        try:
+            with open(p, "rb") as f:
+                payload = pickle.load(f)
+            self._rf_model = payload.get("rf")
+            self._gbm_model = payload.get("gbm")
+            self._lr_model = payload.get("lr")
+            self._scaler = payload.get("scaler", StandardScaler())
+            self._ml_trained = payload.get("ml_trained", bool(self._rf_model is not None))
+            logger.info(f"Loaded ensemble ML baselines from {path}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed loading baselines from {path}: {e}")
+            return False
 
     def _train_ml_baselines(self, states: List[NetworkState]):
         """Train Random Forest, Gradient Boosting, and Logistic Regression on available states."""
@@ -74,6 +120,10 @@ class EnsembleScorer:
                 self._lr_model.fit(X_scaled, y)
                 
                 self._ml_trained = True
+
+                # Save baselines
+                from netwatch.config import MODEL_DIR
+                self.save_baselines(str(MODEL_DIR / "ensemble_baselines.pkl"))
         except Exception as e:
             logger.warning(f"Could not train ML baselines for EnsembleScorer: {e}")
 
