@@ -36,6 +36,7 @@
 </div>
 {% endif %}
 
+{% if result.type != 'model_package' %}
 {% if result.ensemble %}
 <!-- ── Ensemble Scoring Consensus Card ────────────────────────── -->
 <div class="card" style="border-left: 5px solid {% if result.ensemble.consensus.verdict_badge == 'critical' or result.ensemble.consensus.verdict_badge == 'danger' %}var(--danger){% elif result.ensemble.consensus.verdict_badge == 'high' or result.ensemble.consensus.verdict_badge == 'warning' %}#e67e22{% else %}var(--good){% endif %}; margin-bottom: 20px;">
@@ -109,6 +110,7 @@
 </div>
 {% endif %}
 
+{% if result.forecast %}
 <div class="grid">
   <div class="card">
     <h3>Current Risk</h3>
@@ -183,6 +185,7 @@
   </table>
 </div>
 
+{% if result.forecast.current.explanation and result.forecast.current.explanation.top_features %}
 <div class="card">
   <h3>Top Contributing Features (Current)</h3>
   <ul>
@@ -191,21 +194,29 @@
   {% endfor %}
   </ul>
 </div>
+{% endif %}
+{% endif %}
 
 <div class="card">
   <a href="{{ url_for('upload') }}" class="btn btn-secondary">Analyze Another File</a>
   <a href="{{ url_for('dashboard') }}" class="btn btn-primary">View Dashboard</a>
 </div>
+{% endif %}
 {% endblock %}
+
 {% block scripts %}
+{% if result.type != 'model_package' and result.counterfactual %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   // Counterfactual chart
   fetch('/api/counterfactual').then(r => r.json()).then(data => {
+    if (!data || !data.results) return;
     const labels = Object.keys(data.results).map(k => data.results[k].label);
     const finals = Object.keys(data.results).map(k => data.results[k].final_risk);
     const peaks = Object.keys(data.results).map(k => data.results[k].peak_risk);
-    new Chart(document.getElementById('cfChart'), {
+    const chartEl = document.getElementById('cfChart');
+    if (!chartEl) return;
+    new Chart(chartEl, {
       type: 'bar',
       data: {
         labels,
@@ -221,4 +232,5 @@
     });
   });
 </script>
+{% endif %}
 {% endblock %}

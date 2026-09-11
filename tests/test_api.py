@@ -85,6 +85,23 @@ def test_api_scenario_post(client):
         assert set(data["results"]) == {"isolate_host"}
 
 
+def test_upload_model_zip(client):
+    import io
+    import zipfile
+    
+    # Create in-memory test zip containing dummy model file
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("test_dummy.pkl", b"dummy model content")
+    zip_buffer.seek(0)
+    
+    resp = client.post("/upload",
+                       data={"file": (zip_buffer, "test_models.zip"), "file_type": "zip"},
+                       content_type="multipart/form-data")
+    assert resp.status_code == 200
+    assert b"Trained Models Successfully Installed" in resp.data
+
+
 def test_unknown_page_returns_json_404(client):
     resp = client.get("/definitely-not-a-page")
     assert resp.status_code == 404

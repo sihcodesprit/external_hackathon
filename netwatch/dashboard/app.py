@@ -130,29 +130,21 @@ def _process_uploaded_file(file, file_type: str) -> dict:
         try:
             records = ingest(tmp_path, kind=file_type)
             if not records:
-                return {"error": "No valid records found in file"}
-            builder = StateBuilder(group_by_pair=False)
-            states = builder.build_states(records)
-            if not states:
-                return {"error": "No valid network states could be generated"}
-            pipe = _build_pipeline()
-            forecast = pipe.attack_forecaster.forecast(states[-10:], k=5)
-            from netwatch.graph.predictive_attack_graph import build_predictive_graph
-            graph = build_predictive_graph(forecast)
-            from netwatch.counterfactual.simulator import CounterfactualEngine
-            from netwatch.config import DEFAULT_ACTIONS
-            engine = CounterfactualEngine(
-                pipe.trainer.model, pipe.attack_forecaster, pipe.normalizer,
-                feature_columns=pipe.feature_columns)
-            sim = engine.simulate(states[-10:], actions=DEFAULT_ACTIONS, k=5)
-            rec = engine.recommend(sim)
-            stages = [forecast["current"]["stage"]] + [st["stage"] for st in forecast["future"]]
-            mitre = pipe.attack_mapper.map_trajectory(stages)
-            for step in forecast["future"]:
-                step["explanation"] = pipe.explainer.explain(step["state_vec"], step["features"])
-            forecast["current"]["explanation"] = pipe.explainer.explain(
-                forecast["current"]["state_vec"], forecast["current"]["features"])
+                return {"error": "No valid packet or flow records found in uploaded file."}
             
+            pipe = _build_pipeline()
+            # Load real traffic records into active pipeline
+            data_info = pipe.load_data(records=records)
+            states = pipe.states
+            if not states:
+                return {"error": "Traffic was parsed, but not enough temporal windows could be formed to build network states."}
+
+            sim_out = pipe.forecast_and_simulate(k=5)
+            forecast = sim_out["forecast"]
+            graph = sim_out["graph"]
+            counterfactual = sim_out["counterfactual"]
+            mitre = sim_out.get("mitre_trajectory", [])
+
             # Run multi-tool ensemble scoring
             scorer = EnsembleScorer(pipeline=pipe)
             ensemble_res = scorer.evaluate_traffic(records=records, states=states, k_steps=5)
@@ -164,7 +156,7 @@ def _process_uploaded_file(file, file_type: str) -> dict:
                 "n_states": len(states),
                 "forecast": forecast,
                 "graph": graph,
-                "counterfactual": {**sim, "recommendation": rec},
+                "counterfactual": counterfactual,
                 "mitre_trajectory": mitre,
                 "ensemble": ensemble_res,
             }
@@ -180,6 +172,7 @@ def create_app():
     app.config["JSON_SORT_KEYS"] = False
     app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
     app.jinja_env.globals["zip"] = zip
+    app.jinja_env.globals["enumerate"] = enumerate
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-production")
 
     @app.after_request
