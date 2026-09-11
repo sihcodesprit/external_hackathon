@@ -74,7 +74,7 @@ STAGE_MODEL_PATH = MODEL_DIR / "stage_predictor.pt"
 SCALER_PATH = MODEL_DIR / "feature_scaler.pkl"
 
 # ── Ingestion ──────────────────────────────────────────────
-DEFAULT_INGEST_MODE = _env_override("NW_INGEST", _get("ingest.default_mode", "synthetic"))
+DEFAULT_INGEST_MODE = _env_override("NW_INGEST", _get("ingest.default_mode", "pcap"))
 PCAP_MAX_PACKETS = _get("ingest.pcap_max_packets", 100000)
 CSV_CHUNK_SIZE = _get("ingest.csv_chunk_size", 10000)
 

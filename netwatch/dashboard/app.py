@@ -50,7 +50,7 @@ def _build_pipeline(force_retrain: bool = False) -> Pipeline:
 
         logger.info("Initializing pipeline (loading data & models)...")
         pipe = Pipeline()
-        pipe.load_data(n_traces=2, seed=42)
+        pipe.load_data()
 
         loaded = False
         if not force_retrain:

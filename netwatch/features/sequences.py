@@ -56,15 +56,18 @@ class StateNormalizer:
         with open(path, "w") as f:
             json.dump({"mean": self.mean, "std": self.std}, f)
 
-    @classmethod
-    def load(cls, path) -> "StateNormalizer":
+    def load_from_file(self, path) -> "StateNormalizer":
         with open(path, "r") as f:
             data = json.load(f)
+        self.mean = data["mean"]
+        self.std = data["std"]
+        self._fitted = True
+        return self
+
+    @classmethod
+    def load(cls, path) -> "StateNormalizer":
         n = cls()
-        n.mean = data["mean"]
-        n.std = data["std"]
-        n._fitted = True
-        return n
+        return n.load_from_file(path)
 
 
 def assign_labels_and_stages(

@@ -3,7 +3,7 @@
 
 # ── Ingestion ────────────────────────────────────────────────
 ingest:
-  default_mode: "synthetic"      # synthetic | pcap | csv
+  default_mode: "pcap"           # pcap | csv | jsonl
   pcap_max_packets: 100000       # safety cap for PCAP ingestion
   csv_chunk_size: 10000          # rows per chunk for large CSVs
 
