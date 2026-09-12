@@ -19,6 +19,7 @@ Serves the React SPA + JSON API:
 """
 
 import functools
+import gzip
 import json
 import logging
 import os
@@ -51,6 +52,28 @@ _jobs = {}
 _jobs_lock = threading.Lock()
 _jobs_history = []          # summary entries for the Analysis History screen
 _jobs_history_lock = threading.Lock()
+
+# Lazy background prewarm so the first page request never blocks
+# behind the (heavy) pipeline load: assets and health answer instantly.
+_PREWARM_STARTED = False
+
+
+def _ensure_prewarm() -> None:
+    global _PREWARM_STARTED
+    if _PREWARM_STARTED:
+        return
+    if os.environ.get("NETWATCH_SKIP_PREWARM") == "1":
+        return
+    _PREWARM_STARTED = True
+
+    def body() -> None:
+        try:
+            _build_pipeline()
+            logger.info("Background pipeline prewarm complete.")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Background pipeline prewarm failed: %s", e)
+
+    threading.Thread(target=body, daemon=True, name="netwatch-prewarm").start()
 
 ANALYSIS_STAGES = [
     ("Packet parsing", 8, "Parsing packet records."),
@@ -321,6 +344,34 @@ def create_app():
         )
         return response
 
+    @app.after_request
+    def gzip_payload(response):
+        # Compress text/JSON responses so the SPA boots with minimal transfer.
+        if not (200 <= response.status_code < 300):
+            return response
+        if "gzip" not in (request.headers.get("Accept-Encoding") or ""):
+            return response
+        ct = (response.headers.get("Content-Type") or "").split(";")[0]
+        if not (ct.startswith("text/") or ct in (
+                "application/javascript", "application/json", "application/xml")):
+            return response
+        if response.headers.get("Content-Encoding"):
+            return response
+        if response.direct_passthrough:
+            response.direct_passthrough = False
+            response.get_data(as_text=False)  # buffer the streamed file
+        data = response.get_data()
+        if data is None or len(data) < 256:
+            return response
+        compressed = gzip.compress(data, mtime=0)
+        if len(compressed) >= len(data):
+            return response
+        response.set_data(compressed)
+        response.headers["Content-Encoding"] = "gzip"
+        response.headers["Content-Length"] = str(len(compressed))
+        response.headers["Vary"] = "Accept-Encoding"
+        return response
+
     @app.errorhandler(413)
     def too_large(_err):
         return jsonify({"error": "Upload exceeds the 100 MB size limit."}), 413
@@ -337,7 +388,8 @@ def create_app():
     def _inspect_model_artifacts() -> dict:
         registry_models = []
         try:
-            registry_models = _build_pipeline().model_registry.list_models()
+            from netwatch.models.registry import ModelRegistry
+            registry_models = ModelRegistry().list_models()
         except Exception as e:
             logger.warning(f"Could not read model registry: {e}")
 
@@ -624,8 +676,8 @@ def create_app():
 
     @app.route("/api/test-modules")
     def api_test_modules():
-        pipe = _build_pipeline()
-        has_data = bool(getattr(pipe, "states", []))
+        pipe = _pipeline_cache.get("default")
+        has_data = bool(pipe and getattr(pipe, "states", []))
         modules = [{"id": mid, "name": name, "description": desc, "has_data": has_data}
                    for mid, name, desc in MODULE_TEST_DEFS]
         return jsonify({"modules": modules})
@@ -697,6 +749,8 @@ def create_app():
             resp.headers["Cache-Control"] = "no-cache"
             return resp
         return "<pre>Frontend build not found. Run: npm run build (or npm run dev) inside frontend/</pre>", 404
+
+    _ensure_prewarm()
 
     return app
 

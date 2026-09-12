@@ -53,15 +53,16 @@ def run_pipeline():
 
 
 def start_server(port: int, with_pipeline: bool = True):
+    from netwatch.dashboard.app import app, _ensure_prewarm
+
     if with_pipeline:
         try:
-            run_pipeline()
-        except Exception as exc:  # dashboard will (re)train lazily if needed
-            logger.warning("Pre-run pipeline failed (dashboard will retry): %s", exc)
-    from netwatch.dashboard.app import app
+            _ensure_prewarm()
+        except Exception as exc:  # dashboard will build the pipeline lazily if needed
+            logger.warning("Pipeline prewarm failed (dashboard will retry on demand): %s", exc)
 
     logger.info("Starting Counterfactual Cyber World dashboard at http://localhost:%s", port)
-    app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG", "0") == "1")
+    app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG", "0") == "1", threaded=True)
 
 
 def main():
