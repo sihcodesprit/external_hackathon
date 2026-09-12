@@ -1,0 +1,25 @@
+{
+  "name": "external_hackathon",
+  "version": "1.0.0",
+  "description": "**Problem statement (SIH-26153):** AI Based Network Attack Forecasting from\r Network Traffic Data",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sihcodesprit/external_hackathon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/sihcodesprit/external_hackathon/issues"
+  },
+  "homepage": "https://github.com/sihcodesprit/external_hackathon#readme"
+}
