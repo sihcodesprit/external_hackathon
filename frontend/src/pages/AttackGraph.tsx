@@ -12,7 +12,7 @@ export const AttackGraph = () => {
 
         <Card style={{ padding: spacing.lg }}>
           <div style={{ height: '400px', background: colors.chart_bg, borderRadius: 8, marginBottom: spacing.lg }}>
-            {/* Network attack graph visualization would go here */
+            {/* Network attack graph visualization would go here */}
             <p style={{ color: colors.text_muted, fontSize: typography.fontSize.sm, textAlign: 'center', padding: '2rem' }}>
               Interactive attack graph would display here showing:
               <br />• Attacker flow from Reconnaissance → C2 → Exfiltration
@@ -23,7 +23,7 @@ export const AttackGraph = () => {
           </div>
 
           {/* Attack chain breakdown */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit', gap: spacing.md) }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md }}>
             <div style={{ background: colors.surface2, padding: spacing.md, borderRadius: 6 }}>
               <span style={{ color: colors.text_secondary, fontWeight: 500 }}>Reconnaissance</span>
               <p style={{ color: colors.text_muted, fontSize: typography.fontSize.sm, marginTop: spacing.xs }}>18,492 connection attempts detected</p>

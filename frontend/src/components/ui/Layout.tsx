@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Container } from './styles'
 import { NavLink } from 'react-router-dom'
-import { colors, typography, spacing, radius, shadow } from './styles/designSystem'
+import { colors, typography, spacing, radius, shadow } from '../../styles/designSystem'
 
 const sidebarWidth = 260
 const collapsedWidth = 80
 
 export const Sidebar = ({ navLinks, onLinkClick, isCollapsed, toggleCollapse }: any) => {
   return (
-    <nav className="sidebar" style={{ width: isCollapsed ? collapsedWidth : sidebarWidth }}>
+    <nav className={isCollapsed ? 'sidebar collapsed' : 'sidebar'} style={{ width: isCollapsed ? collapsedWidth : sidebarWidth }}>
       <div className="sidebar-header">
         <span className="logo">
           <span>CYBER</span>
@@ -23,24 +23,24 @@ export const Sidebar = ({ navLinks, onLinkClick, isCollapsed, toggleCollapse }: 
         </button>
       </div>
       <ul className="nav-links">
-        {navLinks.map((link: any) => (
-          <li key={link.path} className={({
-            active: isActive,
-          } => `nav-item ${isActive && 'active'}(`)(link.path === window.location.pathname || (link.path === '/' && !window.location.pathname.includes('/')))}`}
-          >
-            <NavLink
-              to={link.path}
-              exact={link.exact}
-              className="nav-link"
-              style={{
-                color: isActive ? colors.accent_blue : colors.text_primary,
-                fontWeight: isActive ? 500 : 400,
-              }}
-            >
-              {link.label}
-            </NavLink>
-          </li>
-        ))}
+        {navLinks.map((link: any) => {
+          const isActive = link.path === window.location.pathname || (link.path === '/' && !window.location.pathname.includes('/'))
+          return (
+            <li key={link.path} className={`nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink
+                to={link.path}
+                exact={link.exact}
+                className="nav-link"
+                style={{
+                  color: isActive ? colors.accent_blue : colors.text_primary,
+                  fontWeight: isActive ? 500 : 400,
+                }}
+              >
+                {link.label}
+              </NavLink>
+            </li>
+          )
+        })}
       </ul>
       <div className="bottom-section">
         <div className="system-status">

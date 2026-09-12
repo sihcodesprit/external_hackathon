@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { startProcessing, updateStage, updateProgress, setMetrics, setError, reset } from '../store/uploadReducer'
 import { setStatus } from '../store/systemReducer'
 import { colors, typography, spacing, radius, shadow } from '../styles/designSystem'
@@ -8,6 +8,7 @@ import { Card, MetricCard, Button } from '../components/ui'
 export const Overview = () => {
   const dispatch = useDispatch()
   const [showDemo, setShowDemo] = useState(false)
+  const status = useSelector((state: any) => state.system)
 
   useEffect(() => {
     fetch('/api/models/status')
@@ -92,7 +93,7 @@ export const Overview = () => {
             </Button>
             <Button
               variant="outline"
-              onClick=(() => setShowDemo(true))
+              onClick={() => setShowDemo(true)}
               style={{
                 padding: `${spacing.lg} ${spacing.xl}`,
                 fontSize: typography.fontSize.lg,
@@ -109,7 +110,7 @@ export const Overview = () => {
         {/* Metrics Section */}
         <div style={{ marginTop: spacing.lg }}>
           <h2 style={{ color: colors.text_secondary, fontSize: typography.fontSize.md, marginBottom: spacing.md }}>Current Network Overview</h2>
-          <div className="metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit', gap: spacing.md)}}>
+          <div className="metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md }}>
             {/* Network Health */}
             <MetricCard
               title="Network Health"
@@ -164,3 +165,5 @@ export const Overview = () => {
     </div>
   )
 }
+
+export default Overview

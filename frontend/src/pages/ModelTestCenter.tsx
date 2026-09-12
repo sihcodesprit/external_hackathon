@@ -111,7 +111,7 @@ export const ModelTestCenter = () => {
           Model Test Center
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit', gap: spacing.md, marginBottom: spacing.lg) }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md, marginBottom: spacing.lg }}>
           {moduleTests.map((test) => (
             <Card
               key={test.id}
@@ -156,7 +156,7 @@ export const ModelTestCenter = () => {
           <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
             Baseline Model Metrics
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: spacing.md, marginTop: spacing.sm }>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: spacing.md, marginTop: spacing.sm }}>
             <MetricCard title="World Model MSE" value="0.0124" bgColor={colors.surface2} />
             <MetricCard title="World Model RMSE" value="0.1115" bgColor={colors.surface2} />
             <MetricCard title="Baseline Accuracy" value="96.5%" bgColor={colors.surface2} />

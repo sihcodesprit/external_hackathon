@@ -5,20 +5,20 @@ import { Sidebar, TopBar, MainContent } from './components/ui/Layout'
 import { useDispatch } from 'react-redux'
 import { setStatus } from './store/systemReducer'
 
-import OverviewPage from './pages/Overview'
-import AnalyzePCAP from './pages/AnalyzePCAP'
-import NetworkState from './pages/NetworkState'
-import Forecast from './pages/Forecast'
-import Mitre from './pages/Mitre'
-import Explainability from './pages/Explainability'
-import AttackGraph from './pages/AttackGraph'
-import CounterfactualLab from './pages/CounterfactualLab'
-import ModelTestCenter from './pages/ModelTestCenter'
-import Evaluation from './pages/Evaluation'
-import Scenarios from './pages/Scenarios'
-import System from './pages/System'
-import History from './pages/History'
-import ReportExport from './pages/ReportExport'
+import { Overview } from './pages/Overview'
+import { AnalyzePCAP } from './pages/AnalyzePCAP'
+import { NetworkState } from './pages/NetworkState'
+import { Forecast } from './pages/Forecast'
+import { Mitre } from './pages/Mitre'
+import { Explainability } from './pages/Explainability'
+import { AttackGraph } from './pages/AttackGraph'
+import { CounterfactualLab } from './pages/CounterfactualLab'
+import { ModelTestCenter } from './pages/ModelTestCenter'
+import { Evaluation } from './pages/Evaluation'
+import { Scenarios } from './pages/Scenarios'
+import { System } from './pages/System'
+import { History } from './pages/History'
+import { ReportExport } from './pages/ReportExport'
 
 const navLinks = [
   { path: '/', label: 'Overview', exact: true },
@@ -77,7 +77,7 @@ function App() {
         />
         <MainContent pageTitle={navLinks.find(l => l.path === location.pathname)?.label || 'Overview'}>
           <Routes>
-            <Route path="/" element={<OverviewPage />} />
+            <Route path="/" element={<Overview />} />
             <Route path="/analyze" element={<AnalyzePCAP />} />
             <Route path="/network-state" element={<NetworkState />} />
             <Route path="/forecast" element={<Forecast />} />
@@ -91,7 +91,7 @@ function App() {
             <Route path="/system" element={<System />} />
             <Route path="/history" element={<History />} />
             <Route path="/report" element={<ReportExport />} />
-            <Route path="*" element={<OverviewPage />} />
+            <Route path="*" element={<Overview />} />
           </Routes>
         </MainContent>
       </Container>

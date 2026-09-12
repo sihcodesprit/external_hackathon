@@ -14,12 +14,12 @@ export const Evaluation = () => {
           <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
             Classification Metrics
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: spacing.md, marginBottom: spacing.lg }>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: spacing.md, marginBottom: spacing.lg }}>
             <MetricCard title="Precision" value="91.2%" bgColor={colors.surface2} />
             <MetricCard title="Recall" value="89.7%" bgColor={colors.surface2} />
             <MetricCard title="F1 Score" value="90.4%" bgColor={colors.surface2} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: spacing.md }>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: spacing.md }}>
             <MetricCard title="FPR" value="3.4%" bgColor={colors.surface2} />
             <MetricCard title="ROC AUC" value="0.96" bgColor={colors.surface2} />
           </div>
@@ -29,7 +29,7 @@ export const Evaluation = () => {
           <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
             Model Comparison
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: spacing.md, marginTop: spacing.sm }>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: spacing.md, marginTop: spacing.sm }}>
             <MetricCard title="World Model" value="94.1% R²" bgColor={colors.alert_low} />
             <MetricCard title="Random Forest" value="95.8% Acc" bgColor={colors.accent_blue} />
             <MetricCard title="Gradient Boosting" value="96.4% Acc" bgColor={colors.accent_cyan} />
@@ -45,7 +45,6 @@ export const Evaluation = () => {
             Feature group contribution to forecasting performance. Results computed from actual model evaluation.
           </p>
           <div style={{ background: colors.chart_bg, borderRadius: 6, padding: spacing.md, height: '200px', marginTop: spacing.sm }}>
-            {/* Ablation chart would go here */}
             <span style={{ color: colors.text_muted, fontSize: typography.fontSize.sm, position: 'absolute', width: '100%' }}>
               Feature ablation comparison (F1 scores)
             </span>

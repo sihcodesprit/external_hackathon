@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { colors, typography, spacing } from '../styles/designSystem'
+import { colors, typography, spacing, radius } from '../styles/designSystem'
 import { Card, MetricCard, Button } from '../components/ui'
+import { startProcessing, updateStage, setError, setSimulationResults } from '../store/counterfactualReducer'
 
 export const CounterfactualLab = () => {
   const dispatch = useDispatch()
   const [showActions, setShowActions] = useState(false)
-  const [selectedAction, setSelectedAction] useState<'no_action' | 'block_source' | 'isolate_host' | 'restrict_path' | 'terminate_flow' | 'block_dest_port'>('no_action')
+  const [selectedAction, setSelectedAction] = useState<'no_action' | 'block_source' | 'isolate_host' | 'restrict_path' | 'terminate_flow' | 'block_dest_port'>('no_action')
   const counterfactual = useSelector(state => state.counterfactual)
 
   useEffect(() => {
@@ -77,7 +78,7 @@ export const CounterfactualLab = () => {
           </div>
 
           {/* Action selection */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit', gap: spacing.md, marginBottom: spacing.lg) }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md, marginBottom: spacing.lg }}>
             <Button
               variant={selectedAction === 'no_action' ? 'primary' : 'outline'}
               style={{ width: '100%', padding: `${spacing.md} ${spacing.lg}`, fontSize: typography.fontSize.md }}

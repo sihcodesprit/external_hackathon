@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { selectForecast } from '../store/reducer'
-import { colors, typography, spacing } from '../styles/designSystem'
+import { colors, typography, spacing, radius } from '../styles/designSystem'
 import { Card, Button } from '../components/ui'
 
 export const Forecast = () => {
@@ -50,11 +50,11 @@ export const Forecast = () => {
             <div style={{ position: 'absolute', left: 200, top: 10, width: 12, height: 12, borderRadius: '50%', background: colors.accent_orange, zIndex: 1 }} />
 
             {/* Labels */}
-            <span style={{ position: 'absolute', left: 30, top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs, left: '40px' }}>&nbsp;&nbsp;t-3</span>
-            <span style={{ position: 'absolute', left: 70, top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs, left: '80px' }}>&nbsp;&nbsp;t-2</span>
-            <span style={{ position: 'absolute', left: 110, top: -25, color: colors.text_primary, fontSize: typography.fontSize.xs, left: '120px' }}>&nbsp;&nbsp;t-1</span>
-            <span style={{ position: 'absolute', left: 150, top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs, left: '160px' }}>&nbsp;&nbsp;t+0</span>
-            <span style={{ position: 'absolute', left: 190, top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs, left: '200px' }}>&nbsp;&nbsp;t+1</span>
+            <span style={{ position: 'absolute', left: '40px', top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t-3</span>
+            <span style={{ position: 'absolute', left: '80px', top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t-2</span>
+            <span style={{ position: 'absolute', left: '120px', top: -25, color: colors.text_primary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t-1</span>
+            <span style={{ position: 'absolute', left: '160px', top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t+0</span>
+            <span style={{ position: 'absolute', left: '200px', top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t+1</span>
           </div>
 
           {/* Risk timeline chart */}
@@ -69,19 +69,19 @@ export const Forecast = () => {
           <div style={{ marginTop: spacing.lg, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md }}>
             <div>
               <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm }}>+1 step</span>
-              <p style={{ color: colors.alert_primary, fontSize: typography.fontSize.md, fontWeight: 500 }}>
+              <p style={{ color: colors.accent_blue, fontSize: typography.fontSize.md, fontWeight: 500 }}>
                 {forecast.future?.[0]?.stage || 'Discovery'} Risk: {forecast.future?.[0]?.risk?.toFixed(1) || '0'}%
               </p>
             </div>
             <div>
               <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm }}>+2 steps</span>
-              <p style={{ color: colors.alert_secondary, fontSize: typography.fontSize.md, fontWeight: 500 }}>
+              <p style={{ color: colors.accent_cyan, fontSize: typography.fontSize.md, fontWeight: 500 }}>
                 {forecast.future?.[1]?.stage || 'Initial Access'} Risk: {forecast.future?.[1]?.risk?.toFixed(1) || '0'}%
               </p>
             </div>
             <div>
               <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm }}>+3 steps</span>
-              <p style={{ color: colors.alert_warning, fontSize: typography.fontSize.md, fontWeight: 500 }}>
+              <p style={{ color: colors.accent_orange, fontSize: typography.fontSize.md, fontWeight: 500 }}>
                 {forecast.future?.[2]?.stage || 'Execution'} Risk: {forecast.future?.[2]?.risk?.toFixed(1) || '0'}%
               </p>
             </div>
@@ -120,3 +120,5 @@ export const Forecast = () => {
     </div>
   )
 }
+
+export default Forecast

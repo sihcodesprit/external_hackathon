@@ -28,7 +28,7 @@ export const NetworkState = () => {
         </h2>
 
         <Card style={{ marginBottom: spacing.lg }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit', gap: spacing.md)}}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md }}>
             {/* Traffic Metrics */}
             <MetricCard
               title="Traffic"
@@ -98,7 +98,7 @@ export const NetworkState = () => {
           <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
             Temporal Features
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit', gap: spacing.md)}}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md }}>
             <MetricCard title="IAT Mean" value={Math.random().toFixed(2)} subtitle="Average inter-arrival" bgColor={colors.surface2} />
             <MetricCard title="IAT Std" value={Math.random().toFixed(2)} subtitle="Variation" bgColor={colors.surface2} />
             <MetricCard title="Jitter" value={Math.random().toFixed(2)} subtitle="Timing variation" bgColor={colors.surface2} />
@@ -125,5 +125,7 @@ export const NetworkState = () => {
         </Card>
       </Container>
     </div>
-  )
+)
 }
+
+export default NetworkState

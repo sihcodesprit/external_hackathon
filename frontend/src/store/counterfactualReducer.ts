@@ -30,6 +30,13 @@ export const counterfactualSlice = createSlice({
   name: 'counterfactual',
   initialState,
   reducers: {
+    startProcessing: (state) => {
+      state.status = 'processing'
+      state.error = null
+    },
+    updateStage: (state, action: PayloadAction<{ stage: string }>) => {
+      state.stage = action.stage
+    },
     setSimulationResults: (state, action: PayloadAction<{
       baselineRisk: number; simulatedRisk: number; riskReduction: number; riskReductionPct: number
       recommendedAction: string; recommendedLabel: string; affectedHosts: number; blockedConnections: number
@@ -55,6 +62,8 @@ export const counterfactualSlice = createSlice({
 })
 
 export const {
+  startProcessing,
+  updateStage,
   setSimulationResults,
   setError,
   clear,

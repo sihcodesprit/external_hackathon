@@ -328,10 +328,9 @@ def create_app():
         if "lateral" in s or "collection" in s or "exfil" in s or "command" in s or "impact" in s:
             return "badge-danger"
         return "badge-neutral"
-    
     app.jinja_env.globals["getStageBadgeClass"] = get_stage_badge_class
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-production")
-
+    
     @app.after_request
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -342,211 +341,6 @@ def create_app():
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:;")
         return response
-
-    @app.route("/")
-    def index():
-        return dashboard()
-
-    @app.route("/dashboard")
-    def dashboard():
-        pipe = _build_pipeline()
-        forecast_data = pipe.results.get("forecast", {})
-        fc = forecast_data.get("forecast", {})
-        current = fc.get("current", {"risk": 0.0, "stage": "Benign", "confidence": 0.0})
-        rec = forecast_data.get("counterfactual", {}).get("recommendation", {
-            "recommended_label": "No Action", "reason": "System operating normally", "risk_reduction_pct_points": 0.0
-        })
-        topology = forecast_data.get("network_topology", {})
-        entities = forecast_data.get("entity_summary", {})
-        forecast_steps = fc.get("future", [])
-        return render_template("dashboard.html", version=__version__,
-                               current=current, recommendation=rec,
-                               topology=topology, entities=entities,
-                               forecast_steps=forecast_steps)
-
-    @app.route("/topology")
-    def topology():
-        pipe = _build_pipeline()
-        fc = pipe.results.get("forecast", {})
-        topo = fc.get("network_topology", {})
-        return render_template("topology.html", version=__version__, topology=topo)
-
-    @app.route("/radar")
-    def radar():
-        pipe = _build_pipeline()
-        fc = pipe.results.get("forecast", {})
-        forecast = fc.get("forecast", {"current": {"risk": 0.0, "stage": "Benign", "confidence": 0.0}, "future": []})
-        return render_template("radar.html", version=__version__, forecast=forecast)
-
-    @app.route("/graph")
-    def attack_graph():
-        pipe = _build_pipeline()
-        fc = pipe.results.get("forecast", {})
-        graph = fc.get("graph", {})
-        return render_template("graph.html", version=__version__, graph_json=graph)
-
-    @app.route("/counterfactual")
-    def counterfactual():
-        pipe = _build_pipeline()
-        fc = pipe.results.get("forecast", {})
-        sim = fc.get("counterfactual", {})
-        return render_template("counterfactual.html", version=__version__, simulation=sim)
-
-    @app.route("/stages")
-    def stages():
-        pipe = _build_pipeline()
-        fc = pipe.results.get("forecast", {})
-        forecast = fc.get("forecast", {"current": {"risk": 0.0, "stage": "Benign", "confidence": 0.0}, "future": []})
-        mitre = fc.get("mitre_trajectory", [])
-        return render_template("stages.html", version=__version__,
-                               forecast=forecast, mitre=mitre)
-
-    @app.route("/explainability")
-    def explainability():
-        pipe = _build_pipeline()
-        fc = pipe.results.get("forecast", {})
-        forecast = fc.get("forecast", {"current": {"risk": 0.0, "stage": "Benign", "confidence": 0.0}, "future": []})
-        return render_template("explainability.html", version=__version__, forecast=forecast)
-
-    @app.route("/evaluation")
-    def evaluation():
-        pipe = _build_pipeline()
-        evals = pipe.results.get("evaluation", {})
-        return render_template("evaluation.html", version=__version__, evals=evals)
-
-    @app.route("/test-center")
-    def test_center():
-        pipe = _build_pipeline()
-        return render_template("test_center.html", version=__version__)
-
-    @app.route("/upload", methods=["GET", "POST"])
-    def upload():
-        if request.method == "POST":
-            if "file" not in request.files:
-                flash("No file selected")
-                return redirect(request.url)
-            file = request.files["file"]
-            if file.filename == "":
-                flash("No file selected")
-                return redirect(request.url)
-            file_type = request.form.get("file_type", "auto")
-            if file_type == "auto":
-                if file.filename.lower().endswith((".pcap", ".pcapng")):
-                    file_type = "pcap"
-                elif file.filename.lower().endswith(".csv"):
-                    file_type = "csv"
-                elif file.filename.lower().endswith(".zip"):
-                    file_type = "zip"
-                else:
-                    file_type = "jsonl"
-            result = _process_uploaded_file(file, file_type)
-            if "error" in result:
-                flash(f"Error: {result['error']}")
-                return redirect(request.url)
-            return render_template("upload_result.html", version=__version__, result=result, filename=file.filename)
-        return render_template("upload.html", version=__version__)
-
-    @app.route("/models", methods=["GET", "POST"])
-    def models():
-        """Dedicated Model Management page — upload .zip bundles, view active weights, reload."""
-        if request.method == "POST":
-            if "model_zip" not in request.files or request.files["model_zip"].filename == "":
-                flash("No model zip file selected")
-                return redirect("/models")
-            file = request.files["model_zip"]
-            if not file.filename.lower().endswith(".zip"):
-                flash("Model upload must be a .zip file (e.g. netwatch_trained_models.zip)")
-                return redirect("/models")
-            result = _install_model_zip(file)
-            if "error" in result:
-                flash(f"Error: {result['error']}")
-            else:
-                flash(f"✓ {result['message']}")
-            return redirect("/models")
-
-        info = _inspect_model_artifacts()
-        return render_template("models.html", version=__version__,
-                               models=info["registry_models"],
-                               artifacts=info["artifacts"],
-                               active_meta=info["active_meta"])
-
-    @app.route("/models/reload", methods=["POST"])
-    def models_reload():
-        """Reload pre-trained weights from disk into the active pipeline,
-        preserving any currently-uploaded traffic session."""
-        global _pipeline_cache
-        with _pipeline_lock:
-            prev = _pipeline_cache.get("default")
-            prev_states = list(prev.states) if prev is not None else []
-            prev_meta = _pipeline_cache.get("upload_meta", {})
-            _pipeline_cache.clear()
-            try:
-                pipe = Pipeline()
-                ok = pipe.load_pretrained()
-                if prev_states:
-                    pipe.states = prev_states
-                    pipe.forecast_and_simulate()
-                _pipeline_cache["default"] = pipe
-                if prev_meta:
-                    _pipeline_cache["upload_meta"] = prev_meta
-                reloaded = True
-                message = ("Pre-trained weights reloaded and active." if ok
-                           else "Models reloaded, but no pre-trained weights found on disk.")
-            except Exception as e:
-                logger.error(f"Failed to reload models: {e}")
-                _pipeline_cache.pop("default", None)
-                return jsonify({"status": "error", "message": str(e)}), 500
-        n_models = len(_inspect_model_artifacts()["artifacts"])
-        return jsonify({
-            "status": "ok" if reloaded else "degraded",
-            "message": message,
-            "n_models": n_models,
-            "preserved_states": len(prev_states),
-        })
-
-    @app.route("/ensemble", methods=["GET", "POST"])
-    def ensemble():
-        pipe = _build_pipeline()
-        scorer = EnsembleScorer(pipeline=pipe)
-        
-        if request.method == "POST":
-            if "file" not in request.files or request.files["file"].filename == "":
-                flash("No file selected")
-                return redirect(request.url)
-            file = request.files["file"]
-            file_type = request.form.get("file_type", "auto")
-            if file_type == "auto":
-                if file.filename.lower().endswith((".pcap", ".pcapng")):
-                    file_type = "pcap"
-                elif file.filename.lower().endswith(".csv"):
-                    file_type = "csv"
-                elif file.filename.lower().endswith(".zip"):
-                    file_type = "zip"
-                else:
-                    file_type = "jsonl"
-            result = _process_uploaded_file(file, file_type)
-            if "error" in result:
-                flash(f"Error: {result['error']}")
-                return redirect(request.url)
-            return render_template("ensemble.html", version=__version__,
-                                   ensemble=result.get("ensemble"), filename=file.filename,
-                                   is_uploaded=True)
-        
-        # Default: evaluate active pipeline traffic states
-        states = getattr(pipe, "states", [])
-        ensemble_results = scorer.evaluate_traffic(states=states, k_steps=5)
-        return render_template("ensemble.html", version=__version__,
-                               ensemble=ensemble_results, filename="Active Pipeline Replay Data",
-                               is_uploaded=False)
-
-    @app.route("/demo")
-    def demo():
-        return redirect(url_for("dashboard"))
-
-    @app.route("/scenarios")
-    def scenarios():
-        pipe = _build_pipeline()
-        return render_template("scenarios.html", version=__version__)
 
     # ── JSON API ────────────────────────────────────────────
     @app.route("/api/ensemble")
@@ -659,13 +453,20 @@ def create_app():
         pipe = _build_pipeline(force_retrain=True)
         return jsonify({"status": "retrained", "n_states": len(pipe.states)})
 
-    @app.errorhandler(404)
-    def not_found(_):
-        return jsonify({"error": "Not found"}), 404
+    # ── Serve React frontend ──────────────────────────────────
+    from flask import send_from_directory, jsonify, abort
 
-    @app.errorhandler(413)
-    def too_large(_):
-        return jsonify({"error": "File too large (max 100MB)"}), 413
+    static_dir = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
+
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def serve_frontend(path):
+        if path.startswith("api/"):
+            return jsonify({"error": "Not found"}), 404
+        try:
+            return send_from_directory(static_dir, "index.html")
+        except Exception:
+            abort(404)
 
     return app
 

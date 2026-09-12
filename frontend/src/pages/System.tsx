@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { colors, typography, spacing } from '../styles/designSystem'
 import { Card, MetricCard, Button } from '../components/ui'
 
@@ -33,14 +33,14 @@ export const System = () => {
             Component Health
           </h3>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md, marginBottom: spacing.lg }>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md, marginBottom: spacing.lg }}>
             <MetricCard title="Backend" value={status.backend === 'Connected' ? '✓ Connected' : '✗ Disconnected'} bgColor={status.backend === 'Connected' ? colors.alert_low : colors.alert_high} />
             <MetricCard title="World Model" value={status.worldModel === 'Loaded' ? '✓ Ready' : '⟳ Training'} bgColor={status.worldModel === 'Loaded' ? colors.alert_low : colors.alert_elevated} />
             <MetricCard title="PCAP Engine" value="✓ Ready" bgColor={colors.alert_low} />
             <MetricCard title="Feature Engine" value="✓ Ready" bgColor={colors.alert_low} />
           </div>
 
-          <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md }}>
             <MetricCard title="MITRE Engine" value="✓ Ready" bgColor={colors.alert_low} />
             <MetricCard title="Explainability" value="✓ Ready" bgColor={colors.alert_low} />
             <MetricCard title="Counterfactual" value="✓ Ready" bgColor={colors.alert_low} />
@@ -52,13 +52,13 @@ export const System = () => {
           <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
             Runtime Configuration
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md, marginBottom: spacing.lg }>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md, marginBottom: spacing.lg }}>
             <MetricCard title="World Model Type" value="LSTM" bgColor={colors.surface2} />
             <MetricCard title="Sequence Length" value="10" bgColor={colors.surface2} />
             <MetricCard title="K-Step Horizon" value="5" bgColor={colors.surface2} />
             <MetricCard title="Feature Groups" value="10 groups" bgColor={colors.surface2} />
           </div>
-          <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md }}>
             <MetricCard title="Dashboard Port" value="5000" bgColor={colors.surface2} />
             <MetricCard title="Max File Size" value="100 MB" bgColor={colors.surface2} />
             <MetricCard title="Anonymize IPs" value="Disabled" bgColor={colors.surface2} />

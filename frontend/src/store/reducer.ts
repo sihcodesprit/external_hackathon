@@ -8,7 +8,7 @@ import explainabilityReducer from './explainabilityReducer'
 import counterfactualReducer from './counterfactualReducer'
 import systemReducer from './systemReducer'
 
-export const rootReducer = combineReducers({
+const rootReducer = combineReducers({
   upload: uploadReducer,
   analysis: analysisReducer,
   forecast: forecastReducer,
@@ -17,3 +17,6 @@ export const rootReducer = combineReducers({
   counterfactual: counterfactualReducer,
   system: systemReducer,
 })
+
+export default rootReducer
+export { rootReducer }

@@ -31,7 +31,7 @@ export const History = () => {
           <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
             Recent Analyses
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit', gap: spacing.md, marginTop: spacing.sm }>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md, marginTop: spacing.sm }}>
             <div style={{ background: colors.surface2, padding: spacing.md, borderRadius: 6, height: '80px' }}>
               <span style={{ color: colors.text_muted, fontSize: typography.fontSize.sm }}>No analyses</span>
             </div>

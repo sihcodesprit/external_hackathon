@@ -21,7 +21,7 @@ export const Scenarios = () => {
           Scenarios
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit', gap: spacing.md, marginBottom: spacing.lg) }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md, marginBottom: spacing.lg }}>
           {scenarios.map((s) => (
             <Card
               key={s.id}

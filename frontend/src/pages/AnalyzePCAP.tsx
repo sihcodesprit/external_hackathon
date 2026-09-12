@@ -299,6 +299,8 @@ export const AnalyzePCAP = () => {
           </Card>
         )}
 
+export default AnalyzePCAP
+
         {/* CTA */}
         <div style={{ marginTop: spacing.lg, display: 'flex', justifyContent: 'flex-end' }}>
           <Button
@@ -318,3 +320,5 @@ export const AnalyzePCAP = () => {
     </div>
   )
 }
+
+export default AnalyzePCAP
