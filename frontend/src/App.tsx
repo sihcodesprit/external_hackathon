@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Container } from './styles'
 import { Sidebar, TopBar, MainContent } from './components/ui/Layout'
 import { useDispatch } from 'react-redux'
-import { setStatus } from './store/store'
+import { setStatus } from './store/systemReducer'
 
 import OverviewPage from './pages/Overview'
 import AnalyzePCAP from './pages/AnalyzePCAP'
@@ -16,8 +16,8 @@ import CounterfactualLab from './pages/CounterfactualLab'
 import ModelTestCenter from './pages/ModelTestCenter'
 import Evaluation from './pages/Evaluation'
 import Scenarios from './pages/Scenarios'
-import History from './pages/History'
 import System from './pages/System'
+import History from './pages/History'
 import ReportExport from './pages/ReportExport'
 
 const navLinks = [
@@ -34,6 +34,7 @@ const navLinks = [
   { path: '/scenarios', label: 'Scenarios' },
   { path: '/system', label: 'System' },
   { path: '/history', label: 'Analysis History' },
+  { path: '/report', label: 'Export Report' },
 ]
 
 function App() {
@@ -47,7 +48,6 @@ function App() {
   const location = useLocation()
 
   useEffect(() => {
-    // Check backend connection
     fetch('/api/models/status')
       .then(res => res.json())
       .then(data => {
