@@ -9,14 +9,17 @@ import pytest
 from netwatch.dashboard.app import app
 
 PAGE_ROUTES = [
-    "/dashboard", "/radar", "/graph", "/counterfactual",
-    "/stages", "/explainability", "/evaluation", "/scenarios",
-    "/ensemble",
+    "/", "/overview", "/analyze", "/network-state", "/forecast",
+    "/graph", "/mitre", "/explainability", "/counterfactual",
+    "/model-test", "/evaluation", "/scenarios", "/system",
+    "/history", "/report",
 ]
 
 API_ROUTES = [
-    "/api/forecast", "/api/graph", "/api/counterfactual", "/api/evaluation",
-    "/api/ensemble",
+    "/api/health", "/api/forecast", "/api/graph", "/api/counterfactual",
+    "/api/evaluation", "/api/ensemble", "/api/mitre", "/api/topology",
+    "/api/entities", "/api/models/status", "/api/network-state",
+    "/api/scenarios", "/api/history", "/api/report", "/api/test-modules",
 ]
 
 
@@ -88,21 +91,50 @@ def test_api_scenario_post(client):
 def test_upload_model_zip(client):
     import io
     import zipfile
-    
+
     # Create in-memory test zip containing dummy model file
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("test_dummy.pkl", b"dummy model content")
     zip_buffer.seek(0)
-    
-    resp = client.post("/upload",
-                       data={"file": (zip_buffer, "test_models.zip"), "file_type": "zip"},
+
+    resp = client.post("/api/upload",
+                       data={"file": (zip_buffer, "test_models.zip")},
                        content_type="multipart/form-data")
     assert resp.status_code == 200
-    assert b"Trained Models Successfully Installed" in resp.data
+    data = resp.get_json()
+    assert data["status"] == "ok"
+    assert data["type"] == "model_package"
 
 
-def test_unknown_page_returns_json_404(client):
-    resp = client.get("/definitely-not-a-page")
+def test_unknown_api_route_returns_json_404(client):
+    resp = client.get("/api/definitely-not-a-route")
     assert resp.status_code == 404
     assert resp.is_json
+
+
+def test_spa_route_serves_index_html(client):
+    resp = client.get("/some/client/route")
+    assert resp.status_code == 200
+    assert "text/html" in resp.content_type
+    assert b"<div id=\"root\">" in resp.data or b"root" in resp.data
+
+
+def test_zip_inspect(client):
+    import io
+    import zipfile
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("recon.pcap", b"\xd4\xc3\xb2\xa1 fake pcap bytes")
+        zf.writestr("normal.pcapng", b"fake pcapng bytes")
+    zip_buffer.seek(0)
+
+    resp = client.post("/api/zip/inspect",
+                       data={"file": (zip_buffer, "capture.zip")},
+                       content_type="multipart/form-data")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["has_traffic"] is True
+    names = [m["name"] for m in data["traffic_members"]]
+    assert "recon.pcap" in names and "normal.pcapng" in names

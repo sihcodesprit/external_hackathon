@@ -1,104 +1,69 @@
-import React, { useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { colors, typography, spacing } from '../styles/designSystem'
-import { Card, Button, MetricCard } from '../components/ui'
+import { palette } from "../styles/theme";
+import { useAnalysis } from "../store/analysisContext";
+import { RequireAnalysis } from "../components/analysis/RequireAnalysis";
+import { Card } from "../components/ui/primitives";
+import { stageColor } from "../styles/theme";
 
-export const Mitre = () => {
-  const dispatch = useDispatch()
-
-  useEffect(() => {
-    fetch('/api/mitre')
-      .then(res => res.json())
-      .then(data => {
-        // MITRE trajectory data loaded
-      })
-  }, [dispatch])
+export default function Mitre() {
+  const { doc } = useAnalysis();
+  const traj = doc?.mitre_trajectory ?? [];
 
   return (
-    <div className="mitre-screen" style={{ minHeight: '100vh', background: colors.background, color: colors.text_primary }}>
-      <Container>
-        <h2 style={{ color: colors.text_primary, fontSize: '2rem', fontWeight: 600, marginBottom: spacing.lg }}>
-          MITRE ATT&CK Progression
-        </h2>
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>MITRE Trajectory</h1>
+      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+        The predicted attack progression mapped to MITRE ATT&CK tactics and techniques. Mapping is
+        deterministic and only claims a technique when the stage evidence supports it.
+      </p>
 
-        <Card style={{ padding: spacing.lg }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: spacing.md, marginBottom: spacing.lg }}>
-            {/* Reconnaissance */}
-            <MetricCard
-              title="Reconnaissance"
-              value="Discovery"
-              subtitle="Multiple destination probes and service enumeration"
-              icon="👀"
-              bgColor={colors.accent_blue}
-            />
-            {/* Initial Access */}
-            <MetricCard
-              title="Initial Access"
-              value="Valid Account"
-              subtitle="External-facing application compromise"
-              icon="🔓"
-              bgColor={colors.accent_cyan}
-            />
-            {/* Execution */}
-            <MetricCard
-              title="Execution"
-              value="Command Scripting"
-              subtitle="User execution of malicious code"
-              icon="⚡"
-              bgColor={colors.accent_orange}
-            />
-            {/* Lateral Movement */}
-            <MetricCard
-              title="Lateral Movement"
-              value="Remote Services"
-              subtitle="RDP/SSH exploitation"
-              icon="🔄"
-              bgColor={colors.alert_elevated}
-            />
-            {/* Command & Control */}
-            <MetricCard
-              title="Command & Control"
-              value="Application Layer"
-              subtitle="Encrypted channel communication"
-              icon="📡"
-              bgColor={colors.alert_high}
-            />
-            {/* Exfiltration */}
-            <MetricCard
-              title="Exfiltration"
-              value="Data Transfer"
-              subtitle="Exfiltrating sensitive data"
-              icon="📤"
-              bgColor={colors.alert_critical}
-            />
-          </div>
-
-          {/* Observed vs Predicted trajectory */}
-          <div style={{ marginTop: spacing.lg }}>
-            <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>Attack Stage Timeline</h3>
-            <div style={{ background: colors.chart_bg, borderRadius: 6, padding: spacing.md }}>
-              {/* Timeline would show observed stages progressing through MITRE tactics */}
-              <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm, marginRight: spacing.md }}>Reconnaissance →</span>
-              <span style={{ color: colors.accent_blue, fontSize: typography.fontSize.sm, marginRight: spacing.md }}>Initial Access →</span>
-              <span style={{ color: colors.accent_orange, fontSize: typography.fontSize.sm, marginRight: spacing.md }}>Execution →</span>
-              <span style={{ color: colors.alert_elevated, fontSize: typography.fontSize.sm, marginRight: spacing.md }}>Lateral Movement →</span>
-              <span style={{ color: colors.alert_high, fontSize: typography.fontSize.sm}}>C2 →</span>
-              <span style={{ color: colors.alert_critical, fontSize: typography.fontSize.sm}}>Exfiltration</span>
-            </div>
-          </div>
-
-          {/* Confidence panel */}
-          <Card style={{ marginTop: spacing.lg, padding: spacing.lg }}>
-            <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>Confidence</h3>
-            <p style={{ color: colors.text_secondary, fontSize: typography.fontSize.lg, fontWeight: 500 }}>
-              87% — Current stage prediction confidence
-            </p>
-            <p style={{ color: colors.text_muted, fontSize: typography.fontSize.sm, marginTop: spacing.xs }}>
-              Based on feature analysis: high destination entropy, SYN rate increase, new host connections
-            </p>
+      <RequireAnalysis>
+        {traj.length === 0 ? (
+          <Card title="MITRE mapping">
+            <div style={{ fontSize: 12.5, color: palette.textMuted }}>No attack stages to map — traffic appears benign or no forecast is available.</div>
           </Card>
-        </Card>
-      </Container>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {traj.map((t, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: 16,
+                  alignItems: "center",
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  border: `1px solid ${t.has_mitre ? palette.accentBorder : palette.borderSoft}`,
+                  background: t.has_mitre ? palette.accentSoft : "rgba(16,24,42,0.28)",
+                  opacity: t.has_mitre ? 1 : 0.55,
+                }}
+              >
+                <span className="mono" style={{ fontSize: 12, color: palette.textMuted, width: 40 }}>t{i === 0 ? "" : `+${i}`}</span>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: t.has_mitre ? stageColor(t.stage) : palette.border,
+                    boxShadow: t.has_mitre ? `0 0 10px ${stageColor(t.stage)}70` : "none",
+                  }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: palette.text }}>{t.stage}</div>
+                  <div style={{ fontSize: 11, color: palette.textDim }}>
+                    tactic: <span className="mono">{t.tactic}</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div className="mono" style={{ fontSize: 13, color: t.has_mitre ? palette.accent : palette.textMuted }}>
+                    {t.has_mitre ? t.technique_id : "UNKNOWN"}
+                  </div>
+                  <div style={{ fontSize: 11, color: palette.textMuted }}>{t.technique_name}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </RequireAnalysis>
     </div>
-  )
+  );
 }

@@ -187,10 +187,16 @@ class LSTMWorldModel(WorldModel):
 
     def load(self, path: str) -> bool:
         import os
+        if not os.path.exists(path):
+            logger.warning(f"No checkpoint at {path}")
+            return False
         try:
             ckpt = torch.load(path, map_location=self.device, weights_only=False)
         except TypeError:
             ckpt = torch.load(path, map_location=self.device)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Failed to load checkpoint {path}: {e}")
+            return False
         self.model = LSTMNextState(
             ckpt["n_features"],
             ckpt["hidden_size"],

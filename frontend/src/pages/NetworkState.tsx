@@ -1,131 +1,121 @@
-import React, { useEffect } from 'react'
-import { useDispatch } from 'react-redux'
-import { colors, typography, spacing, radius } from '../styles/designSystem'
-import { Card, MetricCard, Button } from '../components/ui'
+import { useState } from "react";
+import { palette } from "../styles/theme";
+import { useAnalysis } from "../store/analysisContext";
+import { RequireAnalysis } from "../components/analysis/RequireAnalysis";
+import { Card, Grid, KeyValue, Tag } from "../components/ui/primitives";
+import type { NetworkStateRow } from "../types";
+import { fmtNum, fmtDateTime } from "../utils/format";
 
-export const NetworkState = () => {
-  const dispatch = useDispatch()
+export default function NetworkState() {
+  const { doc } = useAnalysis();
+  const [selectedIdx, setSelectedIdx] = useState<number>(-1);
 
-  useEffect(() => {
-    // Fetch current network state from backend
-    fetch('/api/topology')
-      .then(res => res.json())
-      .then(data => {
-        // Topology data loaded
-      })
-    fetch('/api/entities')
-      .then(res => res.json())
-      .then(data => {
-        // Entities loaded
-      })
-  }, [dispatch])
+  const groups = doc?.state_groups as Array<{ id: string; label: string; description: string; features: Array<{ feature: string; label: string; value: number }> }> | null;
+  const rows: NetworkStateRow[] = doc?.network_state?.states ?? [];
+  const sel = rows[selectedIdx >= 0 ? selectedIdx : rows.length - 1];
 
   return (
-    <div className="network-state-screen" style={{ minHeight: '100vh', background: colors.background, color: colors.text_primary }}>
-      <Container>
-        <h2 style={{ color: colors.text_primary, fontSize: '2rem', fontWeight: 600, marginBottom: spacing.lg }}>
-          Network State
-        </h2>
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Network State</h1>
+      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+        Windowed network states reconstructed from the capture, grouped into traffic, TCP handshake,
+        entropy, temporal and dynamic-graph feature families.
+      </p>
 
-        <Card style={{ marginBottom: spacing.lg }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md }}>
-            {/* Traffic Metrics */}
-            <MetricCard
-              title="Traffic"
-              value={`${Math.floor(Math.random() * 5000) + 100} pkts/sec`}
-              subtitle="Packets per second"
-              icon="↯"
-              bgColor={colors.accent_blue}
-            />
-            <MetricCard
-              title="Flow Rate"
-              value={`${Math.floor(Math.random() * 500) + 50} flows/sec`}
-              subtitle="Active connections"
-              icon="↔️"
-              bgColor={colors.accent_cyan}
-            />
-            <MetricCard
-              title="Active Hosts"
-              value={Math.floor(Math.random() * 100) + 10}
-              subtitle="Live endpoints"
-              icon="🖥️"
-              bgColor={colors.accent_orange}
-            />
+      <RequireAnalysis>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Card title="Current state metrics" subtitle={sel ? `${fmtDateTime(sel.timestamp)} · ${sel.stage || "Benign"}` : undefined}>
+            {!groups || groups.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: palette.textMuted }}>No feature groups available.</div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+                {groups.map((g) => (
+                  <div key={g.id} style={{ padding: 12, borderRadius: 9, border: `1px solid ${palette.borderSoft}`, background: "rgba(16,24,42,0.3)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 650, color: palette.text }}>{g.label}</span>
+                      <Tag color="#38bdf8">{g.features.length}</Tag>
+                    </div>
+                    <div style={{ fontSize: 11, color: palette.textMuted, marginBottom: 8 }}>{g.description}</div>
+                    <div>
+                      {g.features.map((f) => (
+                        <KeyValue key={f.feature} k={f.label} v={fmtNum(f.value, 3)} mono />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
 
-            {/* TCP Metrics */}
-            <MetricCard
-              title="SYN Rate"
-              value={`${Math.floor(Math.random() * 200) + 50}/sec`}
-              subtitle="Connection attempts"
-              icon="🔗"
-              bgColor={colors.alert_elevated}
-            />
-            <MetricCard
-              title="ACK Rate"
-              value={`${Math.floor(Math.random() * 150) + 30}/sec`}
-              subtitle="Handshakes complete"
-              icon="✓"
-              bgColor={colors.alert_low}
-            />
-            <MetricCard
-              title="RST Rate"
-              value={`${Math.floor(Math.random() * 50) + 5}/sec`}
-              subtitle="Resets"
-              icon="✕"
-              bgColor={colors.border}
-            />
+          <Card title={`State timeline (${rows.length})`} subtitle="Click a row to inspect its feature vector">
+            {rows.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: palette.textMuted }}>No states captured.</div>
+            ) : (
+              <div style={{ maxHeight: 380, overflowY: "auto", border: `1px solid ${palette.borderSoft}`, borderRadius: 8 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left" }}>
+                      <th style={{ padding: "8px 10px", color: palette.textMuted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.5, borderBottom: `1px solid ${palette.border}` }}>#</th>
+                      <th style={{ padding: "8px 10px", color: palette.textMuted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.5, borderBottom: `1px solid ${palette.border}` }}>Timestamp</th>
+                      <th style={{ padding: "8px 10px", color: palette.textMuted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.5, borderBottom: `1px solid ${palette.border}` }}>Label</th>
+                      <th style={{ padding: "8px 10px", color: palette.textMuted, fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.5, borderBottom: `1px solid ${palette.border}` }}>Stage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr
+                        key={r.idx}
+                        onClick={() => {
+                          setSelectedIdx(r.idx);
+                          document.getElementById(`state-features`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                        style={{
+                          cursor: "pointer",
+                          background: r.idx === sel?.idx ? palette.accentSoft : "transparent",
+                          borderBottom: `1px solid ${palette.borderSoft}`,
+                        }}
+                      >
+                        <td className="mono" style={{ padding: "7px 10px", color: palette.textDim }}>{r.idx}</td>
+                        <td className="mono" style={{ padding: "7px 10px", color: palette.textDim }}>{fmtDateTime(r.timestamp)}</td>
+                        <td style={{ padding: "7px 10px" }}>
+                          <Tag color={r.label === 1 ? "#ef4444" : "#34d399"}>{r.label === 1 ? "Attack" : "Benign"}</Tag>
+                        </td>
+                        <td style={{ padding: "7px 10px", color: r.stage ? palette.text : palette.textMuted }}>
+                          {r.stage || "Benign"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
 
-            {/* Entropy Metrics */}
-            <MetricCard
-              title="Destination Entropy"
-              value={Math.random().toFixed(1)}
-              subtitle="Diversity of destinations"
-              icon="🎯"
-              bgColor={Math.random() > 0.5 ? colors.alert_high : colors.alert_low}
-            />
-            <MetricCard
-              title="Port Entropy"
-              value={Math.random().toFixed(1)}
-              subtitle="Port diversity"
-              icon="🔢"
-              bgColor={Math.random() > 0.4 ? colors.alert_elevated : colors.alert_low}
-            />
-          </div>
-        </Card>
-
-        {/* Temporal Section */}
-        <Card>
-          <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
-            Temporal Features
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md }}>
-            <MetricCard title="IAT Mean" value={Math.random().toFixed(2)} subtitle="Average inter-arrival" bgColor={colors.surface2} />
-            <MetricCard title="IAT Std" value={Math.random().toFixed(2)} subtitle="Variation" bgColor={colors.surface2} />
-            <MetricCard title="Jitter" value={Math.random().toFixed(2)} subtitle="Timing variation" bgColor={colors.surface2} />
-            <MetricCard title="Burstiness" value={Math.random().toFixed(2)} subtitle="Traffic patterns" bgColor={colors.surface2} />
-          </div>
-        </Card>
-
-        {/* Graph Section */}
-        <Card>
-          <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
-            Network Graph Overview
-          </h3>
-          <p style={{ color: colors.text_muted, fontSize: typography.fontSize.sm }}>
-            Interactive network topology visualization would display here with nodes and edges
-            representing actual analyzed hosts and communications.
-          </p>
-          <Button
-            variant="outline"
-            style={{ width: '100%', padding: `${spacing.md} ${spacing.lg}`, fontSize: typography.fontSize.md }}
-            onClick={() => window.location.href = '/attack-graph'}
-          >
-            View Attack Graph
-          </Button>
-        </Card>
-      </Container>
+          {sel && (
+            <div id="state-features">
+              <Card title={`State #${sel.idx} — full feature vector`} subtitle={fmtDateTime(sel.timestamp)}>
+                <Grid cols="repeat(auto-fit, minmax(240px, 1fr))" gap={14}>
+                  {(["traffic", "tcp_handshake", "entropy", "temporal", "graph"] as const).map((gk) => {
+                    const vals = (sel as unknown as Record<string, Record<string, number>>)[gk] ?? {};
+                    const entries = Object.entries(vals);
+                    if (entries.length === 0) return null;
+                    return (
+                      <div key={gk}>
+                        <div style={{ fontSize: 11, fontWeight: 650, color: palette.accent, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 }}>
+                          {gk.replace("_", " ")}
+                        </div>
+                        {entries.map(([k, v]) => (
+                          <KeyValue key={k} k={k} v={fmtNum(v, 3)} mono />
+                        ))}
+                      </div>
+                    );
+                  })}
+                </Grid>
+              </Card>
+            </div>
+          )}
+        </div>
+      </RequireAnalysis>
     </div>
-)
+  );
 }
-
-export default NetworkState

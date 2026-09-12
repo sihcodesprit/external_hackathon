@@ -1,64 +1,76 @@
-import React from 'react'
-import { colors, typography, spacing } from '../styles/designSystem'
-import { Card, Button } from '../components/ui'
+import { palette } from "../styles/theme";
+import { useAnalysis } from "../store/analysisContext";
+import { api } from "../services/api";
+import { useFetch } from "../hooks/useFetch";
+import type { ScenarioInfo } from "../types";
+import { Card, Pill, Grid, Tag } from "../components/ui/primitives";
+import { Button } from "../components/ui/Button";
+import { ErrorState, PageLoader } from "../components/ui/displays";
 
-export const Scenarios = () => {
-  const scenarios = [
-    { id: 'benign', label: 'Benign Traffic', description: 'Normal network traffic without attack patterns', run: 'Run Analysis' },
-    { id: 'recon', label: 'Reconnaissance', description: 'Port scanning and service enumeration', run: 'Run Analysis' },
-    { id: 'port_scan', label: 'Port Scan', description: 'Single or multi-host port scanning', run: 'Run Analysis' },
-    { id: 'brute_force', label: 'Brute Force', description: 'Credential guessing attacks', run: 'Run Analysis' },
-    { id: 'dos', label: 'DoS', description: 'Denial of service traffic flood', run: 'Run Analysis' },
-    { id: 'multi_stage', label: 'Multi-Stage Attack', description: 'Chained attack: Recon → Access → Execution → C2 → Exfil', run: 'Run Analysis' },
-    { id: 'unseen', label: 'Unseen Attack', description: 'Attack pattern not in training set', run: 'Run Analysis', note: 'Synthetic data' },
-    { id: 'custom', label: 'Custom PCAP', description: 'Upload your own PCAP for analysis', run: 'Run Analysis' },
-  ]
+export default function Scenarios() {
+  const { data, loading, error } = useFetch(() => api.scenarios(), []);
+  const { startScenario, running } = useAnalysis();
+  const scenarios: ScenarioInfo[] = data ?? [];
+
+  const activeKind = ["benign", "recon", "bruteforce", "dos", "mixed"];
 
   return (
-    <div className="scenarios-screen" style={{ minHeight: '100vh', background: colors.background, color: colors.text_primary }}>
-      <Container>
-        <h2 style={{ color: colors.text_primary, fontSize: '2rem', fontWeight: 600, marginBottom: spacing.lg }}>
-          Scenarios
-        </h2>
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Attack Scenarios</h1>
+      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+        Built-in demos that feed the engine with{" "}
+        <span style={{ color: palette.warn, fontWeight: 650 }}>clearly-labelled SYNTHETIC DATA</span> —
+        they are generated traces and are never presented as live captures.
+      </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md, marginBottom: spacing.lg }}>
-          {scenarios.map((s) => (
+      <div style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: 8, border: `1px solid ${palette.warn}40`, background: `${palette.warn}10` }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: palette.warn }} />
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: palette.warn, letterSpacing: 0.6 }}>SOURCE: SYNTHETIC DATA</span>
+      </div>
+
+      {error && <ErrorState message={error} />}
+      {loading && <PageLoader label="Loading scenarios…" />}
+      {!loading && !error && (
+        <Grid cols="repeat(auto-fill, minmax(300px, 1fr))" gap={14}>
+          {scenarios.map((s, i) => (
             <Card
               key={s.id}
-              style={{
-                padding: spacing.lg,
-                background: s.note ? colors.border : colors.surface,
-                borderRadius: 6,
-                                border: `1px solid ${s.note ? colors.alert_critical : colors.border}`,
-              }}
+              title={s.name}
+              subtitle={`scenario ${i + 1} / ${scenarios.length}`}
+              headerRight={<Pill tone="warn">synthetic</Pill>}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
-                <span style={{ color: colors.text_primary, fontSize: typography.fontSize.md, fontWeight: 500 }}>
-                  {s.label}
-                </span>
-                <span style={{ color: colors.text_muted, fontSize: typography.fontSize.sm }}>
-                  {s.run}
-                </span>
-              </div>
-              <p style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm, marginBottom: spacing.sm }}>
+              <div style={{ fontSize: 12.5, color: palette.textDim, lineHeight: 1.6, marginBottom: 14, minHeight: 46 }}>
                 {s.description}
-              </p>
-              {s.note && (
-                <p style={{ color: colors.alert_critical, fontSize: typography.fontSize.sm, fontWeight: 500 }}>
-                  {s.note}
-                </p>
-              )}
-              <Button
-                variant="outline"
-                style={{ width: '100%', padding: `${spacing.xs} ${spacing.sm}`, fontSize: typography.fontSize.sm }}
-                onClick={() => alert(`Run ${s.label} scenario`)}
-              >
-                Run Analysis
-              </Button>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+                {(s.attack_types?.length ? s.attack_types : ["none"]).map((a) => (
+                  <Tag key={a} color={a === "none" ? "#34d399" : "#f87171"}>
+                    {a}
+                  </Tag>
+                ))}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="mono" style={{ fontSize: 11, color: palette.textMuted }}>{s.id}</span>
+                <Button
+                  size="sm"
+                  onClick={() => startScenario(s.id)}
+                  disabled={running}
+                  loading={running}
+                  variant={activeKind.includes(s.id) && i % 2 === 1 ? "outline" : "primary"}
+                >
+                  {running ? "Running…" : "Run scenario"}
+                </Button>
+              </div>
             </Card>
           ))}
+        </Grid>
+      )}
+
+      {!loading && !error && scenarios.length === 0 && (
+        <div style={{ fontSize: 12.5, color: palette.textMuted }}>
+          The scenario manifest is empty on the backend.
         </div>
-      </Container>
+      )}
     </div>
-  )
+  );
 }

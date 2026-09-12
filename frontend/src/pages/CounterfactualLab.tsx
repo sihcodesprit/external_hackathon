@@ -1,177 +1,65 @@
-import React, { useEffect, useState } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { colors, typography, spacing, radius } from '../styles/designSystem'
-import { Card, MetricCard, Button } from '../components/ui'
-import { startProcessing, updateStage, setError, setSimulationResults } from '../store/counterfactualReducer'
+import { palette } from "../styles/theme";
+import { useAnalysis } from "../store/analysisContext";
+import { RequireAnalysis } from "../components/analysis/RequireAnalysis";
+import { Card } from "../components/ui/primitives";
+import { CounterfactualPanel } from "../components/counterfactual/CounterfactualPanel";
 
-export const CounterfactualLab = () => {
-  const dispatch = useDispatch()
-  const [showActions, setShowActions] = useState(false)
-  const [selectedAction, setSelectedAction] = useState<'no_action' | 'block_source' | 'isolate_host' | 'restrict_path' | 'terminate_flow' | 'block_dest_port'>('no_action')
-  const counterfactual = useSelector(state => state.counterfactual)
-
-  useEffect(() => {
-    fetch('/api/counterfactual')
-      .then(res => res.json())
-      .then(data => {
-        dispatch(setCounterfactualSimulation(data))
-      })
-  }, [dispatch])
-
-  const handleAction = async (actionId: string) => {
-    setSelectedAction(actionId)
-    setShowActions(true)
-
-    dispatch(startProcessing())
-    dispatch(updateStage({ stage: `Simulating: ${actionId}`, message: 'Running counterfactual simulation...' }))
-
-    try {
-      const res = await fetch('/api/counterfactual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: actionId, k: 5 })
-      })
-      const result = await res.json()
-
-      if (result.error) {
-        dispatch(setError(result.error))
-        return
-      }
-
-      dispatch(setSimulationResults({
-        baselineRisk: result.baseline_current_risk,
-        simulatedRisk: result.results[actionId]?.final_risk || 0,
-        riskReduction: result.baseline_current_risk - (result.results[actionId]?.final_risk || 0),
-        riskReductionPct: ((result.baseline_current_risk - (result.results[actionId]?.final_risk || 0)) * 100).toFixed(1),
-        recommendedAction: result.recommendation?.recommended_action || 'No Action',
-        recommendedLabel: result.recommendation?.recommended_label || 'No Action',
-        affectedHosts: result.results[actionId]?.affected_hosts || 0,
-        blockedConnections: result.results[actionId]?.blocked_connections || 0,
-        actionResults: Object.entries(result.results).map(([id, r]) => ({
-          action: id,
-          risk: r.final_risk,
-          peakRisk: r.peak_risk,
-          label: r.label,
-        }))
-      }))
-
-    } catch (err) {
-      dispatch(setError('Counterfactual simulation failed'))
-    }
-  }
+export default function CounterfactualLab() {
+  const { doc } = useAnalysis();
+  const cf = doc?.counterfactual;
 
   return (
-    <div className="counterfactual-screen" style={{ minHeight: '100vh', background: colors.background, color: colors.text_primary }}>
-      <Container>
-        <h2 style={{ color: colors.text_primary, fontSize: '2rem', fontWeight: 600, marginBottom: spacing.lg }}>
-          Counterfactual Lab
-        </h2>
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Counterfactual Defense Lab</h1>
+      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+        The world model simulates what happens to near-term risk if the SOC applies each defensive
+        action, then recommends the option with the largest predicted risk reduction.
+      </p>
 
-        <Card style={{ marginBottom: spacing.lg }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
-            <span style={{ color: colors.text_primary, fontSize: typography.fontSize.lg, fontWeight: 500 }}>
-              Simulate Defensive Actions
-            </span>
-            <span style={{ color: colors.text_muted, fontSize: typography.fontSize.sm }}>
-              Test what-if scenarios before applying defenses
-            </span>
-          </div>
+      <RequireAnalysis>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <CounterfactualPanel doc={doc!} />
 
-          {/* Action selection */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md, marginBottom: spacing.lg }}>
-            <Button
-              variant={selectedAction === 'no_action' ? 'primary' : 'outline'}
-              style={{ width: '100%', padding: `${spacing.md} ${spacing.lg}`, fontSize: typography.fontSize.md }}
-              onClick={() => handleAction('no_action')}
-            >
-              No Action
-              <span style={{ float: 'right', color: colors.text_muted, fontSize: typography.fontSize.sm }}>
-                Baseline: {(counterfactual.baselineRisk * 100).toFixed(0)}%
-              </span>
-            </Button>
-
-            <Button
-              variant={selectedAction === 'block_source' ? 'primary' : 'outline'}
-              style={{ width: '100%', padding: `${spacing.md} ${spacing.lg}`, fontSize: typography.fontSize.md }}
-              onClick={() => handleAction('block_source')}
-            >
-              Block Source
-              <span style={{ float: 'right', color: colors.text_muted, fontSize: typography.fontSize.sm }}>
-                {(counterfactual.actionResults.find(r => r.action === 'block_source')?.risk * 100).toFixed(0)}%
-              </span>
-            </Button>
-
-            <Button
-              variant={selectedAction === 'isolate_host' ? 'primary' : 'outline'}
-              style={{ width: '100%', padding: `${spacing.md} ${spacing.lg}`, fontSize: typography.fontSize.md }}
-              onClick={() => handleAction('isolate_host')}
-            >
-              Isolate Host
-              <span style={{ float: 'right', color: colors.text_muted, fontSize: typography.fontSize.sm }}>
-                {(counterfactual.actionResults.find(r => r.action === 'isolate_host')?.risk * 100).toFixed(0)}%
-              </span>
-            </Button>
-
-            <Button
-              variant={selectedAction === 'restrict_path' ? 'primary' : 'outline'}
-              style={{ width: '100%', padding: `${spacing.md} ${spacing.lg}`, fontSize: typography.fontSize.md }}
-              onClick={() => handleAction('restrict_path')}
-            >
-              Restrict Path
-              <span style={{ float: 'right', color: colors.text_muted, fontSize: typography.fontSize.sm }}>
-                {(counterfactual.actionResults.find(r => r.action === 'restrict_path')?.risk * 100).toFixed(0)}%
-              </span>
-            </Button>
-          </div>
-
-          {/* Current vs Simulated comparison */}
-          {selectedAction !== 'no_action' && counterfactual.riskReduction > 0 && (
-            <Card style={{ marginTop: spacing.lg, padding: spacing.lg, borderLeft: `4px solid ${colors.accent_blue}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
-                <span>
-                  <span style={{ color: colors.text_primary, fontSize: typography.fontSize.lg, fontWeight: 600 }}>Current World</span>
-                  <p style={{ color: colors.alert_high, fontSize: typography.fontSize.xl, fontWeight: 700 }}>
-                    {(counterfactual.baselineRisk * 100).toFixed(0)}%
-                  </p>
-                </span>
-                <span>
-                  <span style={{ color: colors.text_primary, fontSize: typography.fontSize.lg, fontWeight: 600 }}>Simulated World</span>
-                  <p style={{ color: colors.alert_low, fontSize: typography.fontSize.xl, fontWeight: 700 }}>
-                    {(counterfactual.simulatedRisk * 100).toFixed(0)}%
-                  </p>
-                </span>
+          {cf?.recommendation && (
+            <Card title="Recommendation rationale" subtitle="Simulated peak-risk comparison">
+              <div style={{ fontSize: 13, color: palette.textDim, lineHeight: 1.7 }}>
+                {cf.recommendation.reason}
               </div>
-              <div style={{ display: 'flex', gap: spacing.lg, alignItems: 'center' }}>
-                <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.lg, fontWeight: 600 }}>
-                  {counterfactual.riskReductionPct}% Risk Reduction
-                </span>
-                <span style={{ color: colors.text_muted, fontSize: typography.fontSize.sm }}>
-                  ↓
-                </span>
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "12px 14px",
+                  borderRadius: 8,
+                  background: "rgba(16,24,42,0.3)",
+                  border: `1px solid ${palette.borderSoft}`,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 24,
+                }}
+              >
+                <Stat label="Simulation horizon" value={`${cf.k} steps`} />
+                <Stat label="Effect window" value={`${cf.effect_window} states`} />
+                <Stat label="Baseline peak risk" value={cf.recommendation.baseline_risk.toFixed(3)} />
+                <Stat label="Counterfactual risk" value={cf.recommendation.counterfactual_risk.toFixed(3)} tone="accent" />
+                <Stat label="Risk reduction" value={`-${Math.abs(cf.recommendation.risk_reduction_pct_points).toFixed(1)} pts`} tone="good" />
               </div>
-              <p style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm, marginTop: spacing.xs }}>
-                {counterfactual.recommendedLabel} produces the largest predicted reduction in future attack risk
-              </p>
-              <p style={{ color: colors.text_muted, fontSize: typography.fontSize.sm, marginTop: spacing.xs }}>
-                Affected Hosts: {counterfactual.affectedHosts} | Blocked Connections: {counterfactual.blockedConnections}
-              </p>
             </Card>
           )}
-
-          {/* Recommended Action */}
-          {counterfactual.recommendedAction !== 'no_action' && (
-            <div style={{ marginTop: spacing.lg, padding: spacing.lg, background: 'rgba(0, 212, 170, 0.1)', borderRadius: 8, border: `1px solid ${colors.accent_blue}` }}>
-              <span style={{ color: colors.accent_blue, fontWeight: 600, fontSize: typography.fontSize.md }}>💡 Recommended Action</span>
-              <p style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm, marginTop: spacing.xs }}>
-                {counterfactual.recommendedLabel}
-              </p>
-              <p style={{ color: colors.text_primary, fontSize: typography.fontSize.md, fontWeight: 500, marginTop: spacing.xs }}>
-                {counterfactual.riskReductionPct}% risk reduction
-              </p>
-            </div>
-          )}
-        </Card>
-      </Container>
+        </div>
+      </RequireAnalysis>
     </div>
-  )
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "accent" | "good" }) {
+  return (
+    <div>
+      <div className="mono" style={{ fontSize: 15, fontWeight: 650, color: tone === "accent" ? palette.accent : tone === "good" ? palette.good : palette.text }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 10, color: palette.textMuted, letterSpacing: 0.5, textTransform: "uppercase", marginTop: 2 }}>
+        {label}
+      </div>
+    </div>
+  );
 }

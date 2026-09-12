@@ -1,124 +1,112 @@
-import React, { useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { selectForecast } from '../store/reducer'
-import { colors, typography, spacing, radius } from '../styles/designSystem'
-import { Card, Button } from '../components/ui'
+import { palette } from "../styles/theme";
+import { useAnalysis } from "../store/analysisContext";
+import { RequireAnalysis } from "../components/analysis/RequireAnalysis";
+import { Card, Grid, KeyValue } from "../components/ui/primitives";
+import { MetricCard } from "../components/ui/displays";
+import { ForecastTimeline } from "../components/charts/ForecastTimeline";
+import { stageColor } from "../styles/theme";
+import { fmtNum } from "../utils/format";
 
-export const Forecast = () => {
-  const dispatch = useDispatch()
-
-  useEffect(() => {
-    fetch('/api/forecast')
-      .then(res => res.json())
-      .then(data => {
-        // Forecast data loaded from backend
-        // dispatch(setForecast(data))
-      })
-  }, [dispatch])
-
-  const forecast = useSelector(state => state.forecast)
+export default function Forecast() {
+  const { doc } = useAnalysis();
+  const fc = doc?.forecast;
+  const cur = fc?.current;
+  const future = fc?.future ?? [];
 
   return (
-    <div className="forecast-screen" style={{ minHeight: '100vh', background: colors.background, color: colors.text_primary }}>
-      <Container>
-        <h2 style={{ color: colors.text_primary, fontSize: '2rem', fontWeight: 600, marginBottom: spacing.lg }}>
-          Attack Forecast
-        </h2>
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Forecast & Projection</h1>
+      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+        The LSTM world model projects network risk and attack stage forward over the horizon.
+      </p>
 
-        <Card style={{ padding: spacing.lg, marginBottom: spacing.lg }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: colors.text_primary, fontSize: typography.fontSize.lg, fontWeight: 500 }}>
-              Current Risk: <strong style={{ color: colors.alert_high }}>{forecast.current?.risk?.toFixed(1) || '0'}%</strong>
-            </span>
-            <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm }}>
-              {forecast.current?.stage || 'Benign'}
-            </span>
+      <RequireAnalysis>
+        {fc ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <Grid cols="repeat(4, 1fr)" gap={12}>
+              <MetricCard
+                label="Current risk"
+                value={((cur?.risk ?? 0) * 100).toFixed(1)}
+                tone="danger"
+                sub={cur?.stage ?? "Benign"}
+              />
+              <MetricCard label="Forecast horizon" value={`${fc.k ?? future.length} steps`} sub="K-step projection" tone="accent" />
+              <MetricCard
+                label="Peak projected risk"
+                value={future.length > 0 ? (Math.max(...future.map((s) => (s.risk ?? 0) * 100))).toFixed(1) : "—"}
+                sub={future[future.length - 1]?.stage ?? "—"}
+              />
+              <MetricCard label="Confidence" value={cur?.confidence != null ? `${(cur.confidence * 100).toFixed(0)}%` : "—"} />
+            </Grid>
+
+            <Card title="Risk projection" subtitle={`from "${cur?.stage ?? "Benign"}"`}>
+              <ForecastTimeline forecast={fc} />
+            </Card>
+
+            {future.length > 0 && (
+              <Card title="Step-by-step projection" subtitle="Stage, risk and confidence per forecast step">
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {future.map((s) => (
+                    <div
+                      key={s.step}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 16,
+                        padding: "10px 14px",
+                        borderRadius: 9,
+                        border: `1px solid ${palette.borderSoft}`,
+                        background: "rgba(16,24,42,0.28)",
+                      }}
+                    >
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: palette.accent, width: 34 }}>
+                        t+{s.step}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: palette.text }}>{s.stage}</div>
+                        <div style={{ height: 5, background: palette.border, borderRadius: 99, marginTop: 6, overflow: "hidden" }}>
+<div
+                        style={{
+                          width: `${Math.min(100, (s.risk ?? 0) * 100).toFixed(0)}%`,
+                          height: "100%",
+                          background: stageColor(s.stage),
+                        }}
+                      />
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: stageColor(s.stage) }}>
+                          {((s.risk ?? 0) * 100).toFixed(1)}
+                        </div>
+                        <div className="mono" style={{ fontSize: 10, color: palette.textMuted }}>
+                          {s.confidence != null ? `conf ${(s.confidence * 100).toFixed(0)}%` : ""}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {cur?.explanation && (
+              <Card title="Current state explanation" subtitle="Why the model believes this stage">
+                <div style={{ fontSize: 12.5, color: palette.textDim, lineHeight: 1.6, marginBottom: 10 }}>
+                  {cur.explanation.summary ?? "No explanation generated for the current state."}
+                </div>
+                {Array.isArray(cur.explanation.top_features) && cur.explanation.top_features.length > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    {cur.explanation.top_features.map((f) => (
+                      <KeyValue key={f.feature} k={f.feature} v={fmtNum(f.contribution, 2)} mono />
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )}
           </div>
-
-          {/* Past - Now - Future timeline */}
-          <div style={{ marginTop: spacing.lg, position: 'relative' }}>
-            <div style={{
-              position: 'absolute', top: 30, left: 40, right: 40,
-              height: 2, background: colors.border, zIndex: 0
-            }} />
-            
-            {/* Past markers */}
-            <div style={{ position: 'absolute', left: 40, top: 10, width: 12, height: 12, borderRadius: '50%', background: colors.text_secondary, border: '3px solid ' + colors.background, zIndex: 1 }} />
-            <div style={{ position: 'absolute', left: 80, top: 10, width: 12, height: 12, borderRadius: '50%', background: colors.text_secondary, border: '3px solid ' + colors.background, zIndex: 1 }} />
-            <div style={{ position: 'absolute', left: 120, top: 10, width: 12, height: 12, borderRadius: '50%', background: colors.accent_blue, zIndex: 1 }} />
-            <div style={{ position: 'absolute', left: 160, top: 10, width: 12, height: 12, borderRadius: '50%', background: colors.text_secondary, border: '3px solid ' + colors.background, zIndex: 1 }} />
-            <div style={{ position: 'absolute', left: 200, top: 10, width: 12, height: 12, borderRadius: '50%', background: colors.accent_orange, zIndex: 1 }} />
-
-            {/* Labels */}
-            <span style={{ position: 'absolute', left: '40px', top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t-3</span>
-            <span style={{ position: 'absolute', left: '80px', top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t-2</span>
-            <span style={{ position: 'absolute', left: '120px', top: -25, color: colors.text_primary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t-1</span>
-            <span style={{ position: 'absolute', left: '160px', top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t+0</span>
-            <span style={{ position: 'absolute', left: '200px', top: -25, color: colors.text_secondary, fontSize: typography.fontSize.xs }}>&nbsp;&nbsp;t+1</span>
-          </div>
-
-          {/* Risk timeline chart */}
-          <Card style={{ marginTop: spacing.lg, padding: spacing.lg }}>
-            <h4 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>Risk Progression</h4>
-            <div style={{ height: '300px', background: colors.chart_bg, borderRadius: radius.md, overflow: 'hidden', position: 'relative' }}>
-              {/* Risk chart would go here - line chart showing observed vs predicted risk */}
-            </div>
-          </Card>
-
-          {/* Stage prediction */}
-          <div style={{ marginTop: spacing.lg, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md }}>
-            <div>
-              <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm }}>+1 step</span>
-              <p style={{ color: colors.accent_blue, fontSize: typography.fontSize.md, fontWeight: 500 }}>
-                {forecast.future?.[0]?.stage || 'Discovery'} Risk: {forecast.future?.[0]?.risk?.toFixed(1) || '0'}%
-              </p>
-            </div>
-            <div>
-              <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm }}>+2 steps</span>
-              <p style={{ color: colors.accent_cyan, fontSize: typography.fontSize.md, fontWeight: 500 }}>
-                {forecast.future?.[1]?.stage || 'Initial Access'} Risk: {forecast.future?.[1]?.risk?.toFixed(1) || '0'}%
-              </p>
-            </div>
-            <div>
-              <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm }}>+3 steps</span>
-              <p style={{ color: colors.accent_orange, fontSize: typography.fontSize.md, fontWeight: 500 }}>
-                {forecast.future?.[2]?.stage || 'Execution'} Risk: {forecast.future?.[2]?.risk?.toFixed(1) || '0'}%
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        {/* World Model Visualization */}
-        <Card style={{ marginTop: spacing.lg }}>
-          <h3 style={{ color: colors.text_secondary, marginBottom: spacing.sm, fontSize: typography.fontSize.sm }}>
-            World Model: Observed → Predicted
-          </h3>
-          <div style={{
-            background: colors.chart_bg,
-            borderRadius: radius.md,
-            padding: spacing.lg,
-            marginTop: spacing.sm,
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: spacing.md,
-          }}>
-            <div>
-              <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm, display: 'block', marginBottom: spacing.xs }}>Observed S(t)</span>
-              <p style={{ color: colors.accent_blue, fontFamily: 'monospace', fontSize: typography.fontSize.sm, marginBottom: spacing.xs }}>Flow: 82, SYN: 31, Entropy: 2.8</p>
-            </div>
-            <div>
-              <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm, display: 'block', marginBottom: spacing.xs }}>→ World Model</span>
-              <p style={{ color: colors.accent_cyan, fontFamily: 'monospace', fontSize: typography.fontSize.sm, marginBottom: spacing.xs }}>Flow: 96, SYN: 48, Entropy: 3.7</p>
-            </div>
-            <div>
-              <span style={{ color: colors.text_secondary, fontSize: typography.fontSize.sm, display: 'block', marginBottom: spacing.xs }}>Predicted S(t+1)</span>
-              <p style={{ color: colors.alert_warning, fontFamily: 'monospace', fontSize: typography.fontSize.sm, marginBottom: spacing.xs }}>Flow: 112, SYN: 62, Entropy: 4.5</p>
-            </div>
-          </div>
-        </Card>
-      </Container>
+        ) : (
+          <div style={{ fontSize: 12.5, color: palette.textMuted }}>The forecast is produced after a capture is loaded.</div>
+        )}
+      </RequireAnalysis>
     </div>
-  )
+  );
 }
-
-export default Forecast

@@ -1,169 +1,65 @@
-import React, { useEffect, useState } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { startProcessing, updateStage, updateProgress, setMetrics, setError, reset } from '../store/uploadReducer'
-import { setStatus } from '../store/systemReducer'
-import { colors, typography, spacing, radius, shadow } from '../styles/designSystem'
-import { Card, MetricCard, Button } from '../components/ui'
+import { palette } from "../styles/theme";
+import { useAnalysis } from "../store/analysisContext";
+import { RequireAnalysis } from "../components/analysis/RequireAnalysis";
+import { ThreatHeader } from "../components/analysis/ThreatHeader";
+import { TrafficSummary } from "../components/analysis/TrafficSummary";
+import { Card, Grid } from "../components/ui/primitives";
+import { MetricCard } from "../components/ui/displays";
+import { ForecastTimeline } from "../components/charts/ForecastTimeline";
+import { RadarChart, DetectorList } from "../components/charts/RadarChart";
+import { CounterfactualPanel } from "../components/counterfactual/CounterfactualPanel";
+import { fmtInt } from "../utils/format";
+import { Button } from "../components/ui/Button";
 
-export const Overview = () => {
-  const dispatch = useDispatch()
-  const [showDemo, setShowDemo] = useState(false)
-  const status = useSelector((state: any) => state.system)
-
-  useEffect(() => {
-    fetch('/api/models/status')
-      .then(res => res.json())
-      .then(data => {
-        dispatch(setStatus({
-          backend: data.backend || 'Disconnected',
-          worldModel: data.world_model || 'Uninitialized',
-          data: data.active_traffic?.filename || 'No Analysis',
-        }))
-      })
-  }, [dispatch])
-
-  const handleUpload = async (e: any) => {
-    e.preventDefault()
-    const file = e.target.files[0]
-    if (!file) return
-
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('file_type', 'auto')
-
-    dispatch(reset())
-    dispatch(startProcessing())
-
-    try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
-      const result = await res.json()
-
-      if (result.error) {
-        dispatch(setError(result.error))
-        return
-      }
-
-      // Process the result - update progress and metrics
-      dispatch(setMetrics({
-        nPackets: result.n_records || 0,
-        nFlows: result.n_states || 0,
-        nHosts: result.entity_summary?.entity_count || 0,
-        nProtocols: 8,
-        nUniquePorts: 143,
-        duration: '12m 42s',
-      }))
-
-      // Update stages based on what we got
-      if (result.forecast) {
-        dispatch(updateStage({ stage: 'Forecast', message: 'Forecast generated' }))
-        dispatch(updateProgress({ progress: 100, stage: 'Analysis complete' }))
-      }
-
-    } catch (err) {
-      dispatch(setError('Upload failed'))
-    }
-  }
+export default function Overview() {
+  const { doc, clear } = useAnalysis();
 
   return (
-    <div className="overview-screen" style={{ minHeight: '100vh', background: colors.background, color: colors.text_primary }}>
-      <Container>
-        <div className="hero-section">
-          <h1 style={{ fontSize: '3rem', fontWeight: 600, marginBottom: spacing.xs, letterSpacing: '-0.02em' }}>
-            Network Intelligence
-            <br />
-            from Present to Future
-          </h1>
-          <p style={{ color: colors.text_secondary, fontSize: typography.fontSize.lg, lineHeight: 1.6 }}>
-            Analyze network traffic, understand the current network state, and forecast how an attack may evolve before it happens.
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, letterSpacing: 0.2 }}>Live Threat Overview</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginTop: 4 }}>
+            Real forecasts derived from the LSTM world model, ensemble threat scoring and MITRE mapping.
           </p>
-          <div style={{ marginTop: spacing.lg, display: 'flex', gap: spacing.md }}>
-            <Button
-              variant="primary"
-              onClick={() => window.location.href = '/analyze'}
-              style={{
-                padding: `${spacing.lg} ${spacing.xl}`,
-                fontSize: typography.fontSize.lg,
-                fontWeight: 500,
-              }}
-            >
-              Analyze PCAP
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setShowDemo(true)}
-              style={{
-                padding: `${spacing.lg} ${spacing.xl}`,
-                fontSize: typography.fontSize.lg,
-                borderColor: colors.border,
-                color: colors.text_secondary,
-                background: 'transparent',
-              }}
-            >
-              Explore Demo
-            </Button>
-          </div>
         </div>
+        {doc && (
+          <Button variant="ghost" size="sm" onClick={clear}>
+            Clear analysis
+          </Button>
+        )}
+      </div>
 
-        {/* Metrics Section */}
-        <div style={{ marginTop: spacing.lg }}>
-          <h2 style={{ color: colors.text_secondary, fontSize: typography.fontSize.md, marginBottom: spacing.md }}>Current Network Overview</h2>
-          <div className="metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: spacing.md }}>
-            {/* Network Health */}
-            <MetricCard
-              title="Network Health"
-              value="Stable"
-              subtitle="Normal operation"
-              icon="⚡"
-              bgColor={colors.alert_low}
-            />
-            {/* Current Risk */}
-            <MetricCard
-              title="Current Risk"
-              value={status.data !== 'No Analysis' ? '72%' : '0%'}
-              subtitle="Based on traffic analysis"
-              icon="🔍"
-              bgColor={status.data === 'No Analysis' ? colors.border : colors.alert_low}
-            />
-            {/* Forecast Risk */}
-            <MetricCard
-              title="Forecast Risk"
-              value={status.data !== 'No Analysis' ? '86%' : '0%'}
-              subtitle="Predicted risk over horizon"
-              icon="🔮"
-              bgColor={colors.accent_orange}
-            />
-            {/* Active Hosts */}
-            <MetricCard
-              title="Active Hosts"
-              value={status.data !== 'No Analysis' ? '42' : '0'}
-              subtitle="Live network endpoints"
-              icon="🖥️"
-              bgColor={colors.accent_blue}
-            />
-            {/* Active Flows */}
-            <MetricCard
-              title="Active Flows"
-              value={status.data !== 'No Analysis' ? '1,284' : '0'}
-              subtitle="Current connections"
-              icon="↔️"
-              bgColor={colors.accent_cyan}
-            />
-            {/* Anomalous Flows */}
-            <MetricCard
-              title="Anomalous Flows"
-              value={status.data !== 'No Analysis' ? '137' : '0'}
-              subtitle="Suspicious traffic"
-              icon="⚠️"
-              bgColor={colors.alert_high}
-            />
-          </div>
+      <RequireAnalysis>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <ThreatHeader doc={doc!} />
+
+          <Grid cols="repeat(4, 1fr)" gap={12}>
+            <MetricCard label="Records" value={fmtInt(doc!.traffic_summary?.n_packets)} sub={`${fmtInt(doc!.traffic_summary?.n_flows)} flows`} />
+            <MetricCard label="Network states" value={fmtInt(doc!.n_states)} sub="windowed feature vectors" tone="accent" />
+            <MetricCard label="Hosts" value={fmtInt(doc!.traffic_summary?.n_hosts)} sub={doc!.traffic_summary?.n_hosts ? "discovered via entity resolution" : undefined} />
+            <MetricCard label="Duration" value={`${(doc!.traffic_summary?.duration_seconds ?? 0).toFixed(1)}s`} sub="capture time span" />
+          </Grid>
+
+          <Grid cols="2fr 1fr" gap={14}>
+            <Card title="Forecast trajectory" subtitle="World model K-step projection of network risk and stage">
+              {doc!.forecast ? <ForecastTimeline forecast={doc!.forecast} /> : null}
+            </Card>
+            <Card title="Ensemble detectors" subtitle="Multi-engine threat consensus">
+              {doc!.ensemble ? <DetectorList detectors={doc!.ensemble.detectors} /> : null}
+            </Card>
+          </Grid>
+
+          <Grid cols="2fr 1fr" gap={14}>
+            <TrafficSummary summary={doc!.traffic_summary} />
+            <Card title="Detector radar" subtitle="Normalized scores across engines">
+              {doc!.ensemble?.radar_data ? <RadarChart radar={doc!.ensemble.radar_data} /> : null}
+            </Card>
+          </Grid>
+
+          <CounterfactualPanel doc={doc!} compact />
         </div>
-      </Container>
+      </RequireAnalysis>
     </div>
-  )
+  );
 }
-
-export default Overview
