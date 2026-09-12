@@ -367,39 +367,45 @@ def create_app():
     @app.route("/topology")
     def topology():
         pipe = _build_pipeline()
-        topo = pipe.results["forecast"].get("network_topology", {})
+        fc = pipe.results.get("forecast", {})
+        topo = fc.get("network_topology", {})
         return render_template("topology.html", version=__version__, topology=topo)
 
     @app.route("/radar")
     def radar():
         pipe = _build_pipeline()
-        forecast = pipe.results["forecast"]["forecast"]
+        fc = pipe.results.get("forecast", {})
+        forecast = fc.get("forecast", {"current": {"risk": 0.0, "stage": "Benign", "confidence": 0.0}, "future": []})
         return render_template("radar.html", version=__version__, forecast=forecast)
 
     @app.route("/graph")
     def attack_graph():
         pipe = _build_pipeline()
-        graph = pipe.results["forecast"]["graph"]
+        fc = pipe.results.get("forecast", {})
+        graph = fc.get("graph", {})
         return render_template("graph.html", version=__version__, graph_json=graph)
 
     @app.route("/counterfactual")
     def counterfactual():
         pipe = _build_pipeline()
-        sim = pipe.results["forecast"]["counterfactual"]
+        fc = pipe.results.get("forecast", {})
+        sim = fc.get("counterfactual", {})
         return render_template("counterfactual.html", version=__version__, simulation=sim)
 
     @app.route("/stages")
     def stages():
         pipe = _build_pipeline()
-        forecast = pipe.results["forecast"]["forecast"]
-        mitre = pipe.results["forecast"]["mitre_trajectory"]
+        fc = pipe.results.get("forecast", {})
+        forecast = fc.get("forecast", {"current": {"risk": 0.0, "stage": "Benign", "confidence": 0.0}, "future": []})
+        mitre = fc.get("mitre_trajectory", [])
         return render_template("stages.html", version=__version__,
                                forecast=forecast, mitre=mitre)
 
     @app.route("/explainability")
     def explainability():
         pipe = _build_pipeline()
-        forecast = pipe.results["forecast"]["forecast"]
+        fc = pipe.results.get("forecast", {})
+        forecast = fc.get("forecast", {"current": {"risk": 0.0, "stage": "Benign", "confidence": 0.0}, "future": []})
         return render_template("explainability.html", version=__version__, forecast=forecast)
 
     @app.route("/evaluation")
