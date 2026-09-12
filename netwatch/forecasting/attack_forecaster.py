@@ -58,13 +58,20 @@ class AttackForecaster:
         return {"status": "trained"}
 
     def _attack_prob(self, state_vec_normalized: np.ndarray) -> float:
+        vec = np.asarray(state_vec_normalized, dtype=np.float64).ravel()
         if not self._risk_trained:
             # Fallback: derived from raw activity magnitude (transparent &
             # deterministic) — documented as heuristic when no risk head is fit.
-            magnitude = float(np.linalg.norm(state_vec_normalized))
+            if not np.isfinite(vec).all() or len(vec) == 0:
+                return 0.0
+            magnitude = float(np.linalg.norm(vec))
             return float(min(max(magnitude / 8.0, 0.0), 1.0))
-        return float(self.risk_model.predict_proba(
-            np.asarray(state_vec_normalized).reshape(1, -1))[0, 1])
+        try:
+            p = float(self.risk_model.predict_proba(
+                np.asarray(state_vec_normalized).reshape(1, -1))[0, 1])
+        except Exception:
+            p = 0.0
+        return 0.0 if not np.isfinite(p) else float(min(max(p, 0.0), 1.0))
 
     def _state_from_vec(self, vec: np.ndarray, timestamp: str = "") -> NetworkState:
         """Invert normalization to a raw feature dict for feature interpretation."""

@@ -45,10 +45,10 @@ def _parse_ts(ts_str: str) -> Optional[datetime]:
         return None
 
 
-def compute_base_features(pkts: List[PacketRecord]) -> Dict[str, float]:
+def compute_base_features(pkts: List[PacketRecord], actual_window_seconds: float = None) -> Dict[str, float]:
     """Compute basic flow, packet, and temporal features (original implementation)."""
     total = len(pkts)
-    duration = max(WINDOW_SECONDS, 1.0)
+    duration = actual_window_seconds if actual_window_seconds and actual_window_seconds > 0 else max(WINDOW_SECONDS, 1.0)
 
     ttls, payloads, windows = [], [], []
     ports: List[int] = []
@@ -166,7 +166,16 @@ class StateBuilder:
     """
     Builds a temporal sequence of NetworkState objects from packet records by
     sliding a window over time, grouped (optionally) per (src, dst) pair.
+    
+    Adaptive windowing: If the total duration of the capture is shorter than
+    the default window, it scales down automatically so that ANY size PCAP
+    will produce valid state sequences (minimum 1-second windows, at least 2
+    windows per group, with overlap via step scaling).
     """
+
+    MIN_WINDOW_SECONDS = 1.0
+    MIN_WINDOW_STEP = 1.0
+    MIN_WINDOWS_DESIRED = 5
 
     def __init__(self, 
                  window_seconds: int = WINDOW_SECONDS,
@@ -184,6 +193,38 @@ class StateBuilder:
         self._graph_state: Optional[DynamicGraph] = None
         self._trajectory_tracker: Optional[TrajectoryTracker] = None
         self._baseline_tracker: Optional[BaselineTracker] = None
+
+    def _adapt_window(self, total_duration: float, n_packets: int) -> tuple:
+        """Compute adaptive window size and step based on capture duration.
+        
+        Returns (window_seconds, window_step).
+        """
+        ws = self.window_seconds
+        step = self.window_step
+
+        if total_duration <= 0 or n_packets < 2:
+            return (self.MIN_WINDOW_SECONDS, self.MIN_WINDOW_STEP)
+
+        # If capture is shorter than the configured window, scale down
+        if total_duration < ws:
+            # Target: produce at least MIN_WINDOWS_DESIRED windows
+            # window = total_duration / (MIN_WINDOWS_DESIRED - 1) or just total_duration / 2
+            target_ws = max(self.MIN_WINDOW_SECONDS, total_duration / max(self.MIN_WINDOWS_DESIRED, 2))
+            # Clamp to actual duration so at least 2 packets per window
+            ws = max(self.MIN_WINDOW_SECONDS, min(target_ws, total_duration))
+            # Step = window / 2 for 50% overlap, but never below MIN_WINDOW_STEP
+            step = max(self.MIN_WINDOW_STEP, ws / 2.0)
+        else:
+            # Even for longer captures, ensure we get enough windows
+            n_windows_est = (total_duration - ws) / max(step, 1) + 1
+            if n_windows_est < self.MIN_WINDOWS_DESIRED and total_duration > self.MIN_WINDOW_SECONDS:
+                # Reduce window slightly to produce more windows
+                ws = max(self.MIN_WINDOW_SECONDS, total_duration / self.MIN_WINDOWS_DESIRED)
+                step = max(self.MIN_WINDOW_STEP, ws / 2.0)
+
+        # Final guard: never exceed total_duration for window
+        ws = min(ws, total_duration)
+        return (ws, step)
 
     def build_states(self, records: List[PacketRecord]) -> List[NetworkState]:
         if not records:
@@ -218,6 +259,11 @@ class StateBuilder:
 
             first = timed[0][0]
             last = timed[-1][0]
+            total_duration = (last - first).total_seconds()
+
+            # Adaptive window sizing for short captures
+            ws, step = self._adapt_window(total_duration, len(timed))
+
             win_start = first
             i = 0
             n = len(timed)
@@ -226,7 +272,7 @@ class StateBuilder:
             pkt_dicts = _packet_records_to_dicts([p for _, p in timed])
 
             while win_start <= last:
-                win_end = win_start + timedelta(seconds=self.window_seconds)
+                win_end = win_start + timedelta(seconds=ws)
                 while i < n and timed[i][0] < win_end:
                     i += 1
                 j = i
@@ -238,7 +284,7 @@ class StateBuilder:
                 
                 if window_pkts:
                     # Compute base features
-                    feats = compute_base_features(window_pkts)
+                    feats = compute_base_features(window_pkts, actual_window_seconds=ws)
                     
                     # Advanced features
                     if self.enable_advanced_features:
@@ -288,9 +334,10 @@ class StateBuilder:
                         )
                         feats.update(baseline_feats)
 
-                    # Derive ground-truth label/stage
+                    # Derive ground-truth label/stage (majority vote per window so
+                    # mixed captures produce both attack and benign windows)
                     attack_count = sum(1 for p in window_pkts if p.label == 1)
-                    label = 1 if attack_count >= max(1, int(0.2 * len(window_pkts))) else 0
+                    label = 1 if attack_count * 2 >= len(window_pkts) else 0
                     stage = ""
                     if label:
                         stage = max(
@@ -306,15 +353,15 @@ class StateBuilder:
                         label=label,
                         stage=stage or None,
                     ))
-                win_start += timedelta(seconds=self.window_step)
+                win_start += timedelta(seconds=step)
 
         states.sort(key=lambda s: s.timestamp)
         return states
 
 
-def compute_window_features(pkts: List[PacketRecord]) -> Dict[str, float]:
+def compute_window_features(pkts: List[PacketRecord], actual_window_seconds: float = None) -> Dict[str, float]:
     """
     Legacy function for backward compatibility.
     Computes base features only.
     """
-    return compute_base_features(pkts)
+    return compute_base_features(pkts, actual_window_seconds=actual_window_seconds)

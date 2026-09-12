@@ -1,5 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Attack Stage Timeline — Counterfactual Cyber World{% endblock %}
+{% block title %}MITRE ATT&CK Stages — NetWatch{% endblock %}
+{% block breadcrumb %}MITRE Stages{% endblock %}
+{% block page_title %}MITRE Stages{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Attack Stage Timeline</h1>
@@ -7,36 +9,28 @@
 </div>
 
 <div class="card">
-  <h3>Stage &amp; Mitre ATT&CK Mapping</h3>
-  <table>
-    <thead>
-      <tr><th>Window</th><th>Stage</th><th>MITRE Tactic</th><th>Technique</th><th>Stage Prob.</th></tr>
-    </thead>
-    <tbody>
-      {% if mitre and mitre|length > 0 %}
-      <tr>
-        <td>current</td>
-        <td>{{ forecast.current.stage }}</td>
-        <td>{{ mitre[0].tactic }}</td>
-        <td>{{ mitre[0].technique_id }} {{ mitre[0].technique_name }}</td>
-        <td>{{ '%.2f'|format(forecast.current.stage_probability|default(0.0)) }}</td>
-      </tr>
-      {% for step, m in zip(forecast.future, mitre[1:]) %}
-      <tr>
-        <td>t+{{ step.step }}</td>
-        <td>{{ step.stage }}</td>
-        <td>{{ m.tactic }}</td>
-        <td>{{ m.technique_id }} {{ m.technique_name }}</td>
-        <td>{{ '%.2f'|format(step.stage_probability|default(0.0)) }}</td>
-      </tr>
-      {% endfor %}
-      {% else %}
-      <tr>
-        <td colspan="5" class="muted" style="text-align: center; padding: 20px;">No network capture currently loaded. Upload a PCAP/CSV file to map stages.</td>
-      </tr>
-      {% endif %}
-    </tbody>
-  </table>
+  <div class="card-header"><h3 class="card-title">Stage & MITRE ATT&CK Mapping</h3></div>
+  {% if mitre and mitre|length > 0 %}
+  <div class="stage-timeline">
+    <div class="stage-item current">
+      <span class="stage-window">current</span>
+      <span class="stage-name">{{ forecast.current.stage }}</span>
+      <span class="stage-tactic">{{ mitre[0].tactic }}</span>
+      <span class="stage-technique">{{ mitre[0].technique_id }} {{ mitre[0].technique_name }}</span>
+      <span class="stage-prob">{{ '%.2f'|format(forecast.current.stage_probability|default(0.0)) }}</span>
+    </div>
+    {% for step, m in zip(forecast.future, mitre[1:]) %}
+    <div class="stage-item">
+      <span class="stage-window">t+{{ step.step }}</span>
+      <span class="stage-name">{{ step.stage }}</span>
+      <span class="stage-tactic">{{ m.tactic }}</span>
+      <span class="stage-technique">{{ m.technique_id }} {{ m.technique_name }}</span>
+      <span class="stage-prob">{{ '%.2f'|format(step.stage_probability|default(0.0)) }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted" style="text-align:center;padding:40px;">No network capture currently loaded. Upload a PCAP/CSV file to map stages.</p>
+  {% endif %}
 </div>
 {% endblock %}
-

@@ -18,7 +18,8 @@ import datetime as _dt
 import json
 import logging
 from dataclasses import asdict
-from typing import Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -84,6 +85,7 @@ class Pipeline:
         self.network_graph = NetworkGraph()
         self.model_registry = ModelRegistry()
         self.feature_columns = get_feature_columns()
+        self.n_features = len(self.feature_columns)
         self.states = []
         self.results = {
             "evaluation": {
@@ -178,9 +180,65 @@ class Pipeline:
             "n_graph_edges": len(self.network_graph.edges),
         }
 
+    def _build_trainer_from_checkpoint(self, path: Path) -> Optional[WorldModelTrainer]:
+        """Instantiate the correct WorldModel for a checkpoint file.
+
+        Supports both PyTorch LSTM snapshots (state_dict payload) and the JSON
+        linear-model format (W matrix payload). Returns None if neither matches.
+        """
+        try:
+            import torch
+        except Exception:
+            torch = None
+
+        # Try PyTorch / LSTM first
+        if torch is not None:
+            try:
+                ckpt = torch.load(path, map_location="cpu", weights_only=False)
+                if isinstance(ckpt, dict) and "state_dict" in ckpt and "n_features" in ckpt:
+                    n_feat = int(ckpt.get("n_features", self.n_features))
+                    from netwatch.models.lstm_world_model import LSTMWorldModel
+                    model = LSTMWorldModel(
+                        n_features=n_feat,
+                        hidden_size=ckpt.get("hidden_size", 64),
+                        num_layers=ckpt.get("num_layers", 2),
+                        device="cpu",
+                    )
+                    trainer = WorldModelTrainer(model=model, model_type="lstm", n_features=n_feat)
+                    if trainer.load(str(path)):
+                        logger.info(f"Detected PyTorch LSTM checkpoint ({n_feat} features)")
+                        return trainer
+            except Exception as e:
+                logger.debug(f"Not a torch checkpoint: {e}")
+
+        # Try JSON linear-world-model format
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict) and "W" in d and d.get("W"):
+                n_feat = int(d.get("n_features", self.n_features))
+                if isinstance(d["W"], list):
+                    n_feat_rows = len(d["W"])
+                    if n_feat_rows:
+                        n_feat = n_feat_rows
+                from netwatch.models.linear_world_model import LinearWorldModel
+                model = LinearWorldModel(n_features=n_feat)
+                trainer = WorldModelTrainer(model=model, model_type="linear", n_features=n_feat)
+                if trainer.load(str(path)):
+                    logger.info(f"Detected JSON linear-world-model checkpoint ({n_feat} features)")
+                    return trainer
+        except Exception as e:
+            logger.debug(f"Not a JSON linear checkpoint: {e}")
+
+        return None
+
     def load_pretrained(self, model_path: Optional[str] = None,
                         scaler_path: Optional[str] = None) -> bool:
-        """Load pre-trained LSTM World Model and Feature Scaler from disk without training."""
+        """Load pre-trained World Model + Feature Scaler from disk without training.
+
+        Auto-detects the checkpoint format (PyTorch LSTM snapshot or JSON linear
+        world model) so pre-trained weights load reliably offline.
+        """
         m_path = Path(model_path) if model_path else WORLD_MODEL_PATH
         s_path = Path(scaler_path) if scaler_path else SCALER_PATH
 
@@ -189,9 +247,11 @@ class Pipeline:
 
         try:
             self.normalizer = StateNormalizer.load(s_path)
-            self.trainer = WorldModelTrainer(
-                model_type=WORLD_MODEL_TYPE, n_features=N_FEATURES)
-            self.trainer.load(str(m_path))
+            trainer = self._build_trainer_from_checkpoint(m_path)
+            if trainer is None:
+                logger.warning(f"No compatible world model checkpoint at {m_path}")
+                return False
+            self.trainer = trainer
 
             self.attack_forecaster = AttackForecaster(
                 self.trainer.model, self.normalizer, self.stage_predictor,
@@ -199,13 +259,17 @@ class Pipeline:
 
             if hasattr(self, "states") and self.states:
                 self.attack_forecaster.fit_risk_head(self.states)
-                self.explainer = ShapExplainer(
-                    risk_model=self.attack_forecaster.risk_model
-                    if self.attack_forecaster._risk_trained else None,
-                    feature_columns=self.feature_columns, normalizer=self.normalizer)
-                self.temporal_explainer = TemporalExplainer(
-                    shap_explainer=self.explainer,
-                    feature_columns=self.feature_columns)
+
+            # Always instantiate explainers (they gracefully fall back to
+            # feature-magnitude explanations when no risk head is trained).
+            self.explainer = ShapExplainer(
+                risk_model=self.attack_forecaster.risk_model
+                if hasattr(self.attack_forecaster, "_risk_trained")
+                and self.attack_forecaster._risk_trained else None,
+                feature_columns=self.feature_columns, normalizer=self.normalizer)
+            self.temporal_explainer = TemporalExplainer(
+                shap_explainer=self.explainer,
+                feature_columns=self.feature_columns)
 
             # Set pre-trained evaluation metrics for evaluation endpoints
             self.results["evaluation"] = {
@@ -373,7 +437,7 @@ class Pipeline:
                     attack_idx = i
                     break
         end = attack_idx + 1 if attack_idx is not None else len(self.states)
-        history = self.states[end - seq_len:end]
+        history = self.states[max(0, end - seq_len):end]
 
         forecast = self.attack_forecaster.forecast(history, k=k)
 
@@ -382,13 +446,13 @@ class Pipeline:
 
         for step in forecast["future"]:
             step["explanation"] = self.explainer.explain(
-                step["state_vec"], step["features"])
+                step["state_vec"], step["features"]) if self.explainer else {}
         forecast["current"]["explanation"] = self.explainer.explain(
             forecast["current"]["state_vec"],
-            forecast["current"]["features"])
+            forecast["current"]["features"]) if self.explainer else {}
 
         # Temporal explanation across the forecast horizon
-        temporal_explanation = self.temporal_explainer.analyze(forecast["future"])
+        temporal_explanation = self.temporal_explainer.analyze(forecast["future"]) if self.temporal_explainer else {}
         forecast["temporal_explanation"] = temporal_explanation
 
         self.counterfactual = CounterfactualEngine(

@@ -102,7 +102,9 @@ class EnsembleScorer:
             if len(states) < 4:
                 return
             
-            X = np.array([self.pipeline.normalizer.transform(s) for s in states])
+            X = np.nan_to_num(
+                np.array([self.pipeline.normalizer.transform(s) for s in states],
+                         dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
             y = np.array([1 if (s.label is not None and s.label == 1) else 0 for s in states])
             
             if len(np.unique(y)) < 2:
@@ -334,12 +336,21 @@ class EnsembleScorer:
             "evidence": [f"State activity risk: {risk*100:.1f}%"],
         }
 
+    def _sanitize_vec(self, vec: np.ndarray) -> np.ndarray:
+        """Replace non-finite values so sklearn predictors never choke."""
+        arr = np.asarray(vec, dtype=np.float64)
+        if not np.isfinite(arr).all():
+            arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+        return arr
+
     def _eval_random_forest(self, state: NetworkState, raw: Dict[str, float]) -> Dict[str, Any]:
         """Random Forest non-linear tree ensemble evaluation."""
         if self._ml_trained and self._rf_model and self.pipeline:
             try:
-                norm_vec = self.pipeline.normalizer.transform(state).reshape(1, -1)
+                norm_vec = self._sanitize_vec(self.pipeline.normalizer.transform(state)).reshape(1, -1)
                 proba = float(self._rf_model.predict_proba(norm_vec)[0, 1])
+                if not np.isfinite(proba):
+                    raise ValueError("non-finite RF probability")
                 is_threat = proba >= 0.50
                 return {
                     "id": "random_forest",
@@ -382,8 +393,10 @@ class EnsembleScorer:
         """Gradient Boosting Machine evaluation."""
         if self._ml_trained and self._gbm_model and self.pipeline:
             try:
-                norm_vec = self.pipeline.normalizer.transform(state).reshape(1, -1)
+                norm_vec = self._sanitize_vec(self.pipeline.normalizer.transform(state)).reshape(1, -1)
                 proba = float(self._gbm_model.predict_proba(norm_vec)[0, 1])
+                if not np.isfinite(proba):
+                    raise ValueError("non-finite GBM probability")
                 is_threat = proba >= 0.50
                 return {
                     "id": "gradient_boosting",
@@ -425,9 +438,11 @@ class EnsembleScorer:
         """Calibrated Logistic Regression baseline."""
         if self._ml_trained and self._lr_model and self.pipeline:
             try:
-                norm_vec = self.pipeline.normalizer.transform(state).reshape(1, -1)
+                norm_vec = self._sanitize_vec(self.pipeline.normalizer.transform(state)).reshape(1, -1)
                 scaled_vec = self._scaler.transform(norm_vec)
                 proba = float(self._lr_model.predict_proba(scaled_vec)[0, 1])
+                if not np.isfinite(proba):
+                    raise ValueError("non-finite LR probability")
                 is_threat = proba >= 0.50
                 return {
                     "id": "logistic_regression",

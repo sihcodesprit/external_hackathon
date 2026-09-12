@@ -1,42 +1,47 @@
 {% extends "base.html" %}
 {% block title %}SOC Dashboard — NetWatch{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+{% block page_title %}Cyber World Model{% endblock %}
 {% block content %}
-<div class="page-header">
+<div class="page-header" style="animation: slideUp 0.4s ease;">
   <h1>Cyber World Model</h1>
-  <p>Real-time network risk assessment and attack forecasting</p>
+  <p>Real-time network risk assessment & attack forecasting</p>
 </div>
 
-<div class="grid-4">
+<div class="grid grid-4" style="animation: slideUp 0.4s ease; animation-delay: 0.1s;">
   <div class="card metric-card">
-    <h3>Network Risk</h3>
-    <div class="big-number" style="color: {{ '#ff4444' if current.risk > 0.7 else '#ffaa00' if current.risk > 0.4 else '#44aa44' }}">
+    <div class="metric-label">Network Risk</div>
+    <div class="metric-value" style="color: {{ 'var(--danger)' if current.risk > 0.7 else 'var(--warning)' if current.risk > 0.4 else 'var(--accent)' }}">
       {{ '%.0f'|format(current.risk * 100) }}%
     </div>
     <div class="muted">Current attack probability</div>
   </div>
   <div class="card metric-card">
-    <h3>Active Hosts</h3>
-    <div class="big-number">{{ entities.entity_count|default(0) }}</div>
+    <div class="metric-label">Active Hosts</div>
+    <div class="metric-value">{{ entities.entity_count|default(0) }}</div>
     <div class="muted">Discovered entities</div>
   </div>
   <div class="card metric-card">
-    <h3>Active Edges</h3>
-    <div class="big-number">{{ topology.edges|length if topology else 0 }}</div>
+    <div class="metric-label">Active Edges</div>
+    <div class="metric-value">{{ topology.edges|length if topology else 0 }}</div>
     <div class="muted">Communication links</div>
   </div>
   <div class="card metric-card">
-    <h3>Current Stage</h3>
-    <div class="big-number stage-badge" style="font-size: 1.2em;">{{ current.stage }}</div>
+    <div class="metric-label">Current Stage</div>
+    <div class="metric-value">
+      <span class="badge badge-{{ getStageBadgeClass(current.stage) }}">{{ current.stage }}</span>
+    </div>
     <div class="muted">MITRE ATT&CK phase</div>
   </div>
 </div>
 
-<div class="grid-2">
+<div class="grid grid-2" style="animation: slideUp 0.4s ease; animation-delay: 0.2s;">
   <div class="card">
-    <h3>Network Topology</h3>
-    <div class="topology-mini">
+    <div class="card-header">
+      <h3 class="card-title">Network Topology</h3>
+    </div>
+    <div class="topo-list">
       {% if topology and topology.nodes %}
-      <div class="topo-list">
         {% for node in topology.nodes[:8] %}
         <div class="topo-node" title="{{ node.ip }} ({{ node.entity_type }})">
           <span class="node-dot {{ 'critical' if node.criticality == 'CRITICAL' else 'high' if node.criticality == 'HIGH' else '' }}"></span>
@@ -45,26 +50,26 @@
         </div>
         {% endfor %}
         {% if topology.nodes|length > 8 %}
-        <div class="muted">+{{ topology.nodes|length - 8 }} more</div>
+        <div class="muted">+{{ topology.nodes|length - 8 }} more entities</div>
         {% endif %}
-      </div>
-      <div class="topo-edges">
-        {% for edge in topology.edges[:6] %}
-        <div class="topo-edge">
-          {{ edge.src_id|replace('entity_', '') }} → {{ edge.dst_id|replace('entity_', '') }}
-          <span class="muted">({{ edge.packet_count }} pkts)</span>
-        </div>
-        {% endfor %}
-      </div>
       {% else %}
-      <p class="muted">No topology data available</p>
+        <p class="muted">No topology data available — upload a capture</p>
       {% endif %}
     </div>
-    <a href="/topology" class="btn">View Full Topology</a>
+    <div class="topo-edges">
+      {% if topology and topology.edges %}
+        {% for edge in topology.edges[:6] %}
+        <div class="topo-edge">{{ edge.src_id|replace('entity_', '') }} → {{ edge.dst_id|replace('entity_', '') }} <span class="muted">({{ edge.packet_count }} pkts)</span></div>
+        {% endfor %}
+      {% endif %}
+    </div>
+    <a href="/topology" class="btn btn-secondary" style="margin-top: var(--space-md);">View Full Topology</a>
   </div>
 
   <div class="card">
-    <h3>Recommended Action</h3>
+    <div class="card-header">
+      <h3 class="card-title">Recommended Action</h3>
+    </div>
     <div class="recommendation-box">
       <div class="stage-badge action">{{ recommendation.recommended_label }}</div>
       <p>{{ recommendation.reason }}</p>
@@ -75,22 +80,24 @@
   </div>
 </div>
 
-<div class="card">
-  <h3>Forecast Timeline</h3>
+<div class="card" style="animation: slideUp 0.4s ease; animation-delay: 0.3s;">
+  <div class="card-header">
+    <h3 class="card-title">Forecast Timeline</h3>
+  </div>
   <div class="forecast-strip">
     <div class="forecast-step current">
-      <span class="step-label">NOW</span>
-      <span class="step-risk">{{ '%.0f'|format(current.risk * 100) }}%</span>
-      <span class="step-stage">{{ current.stage }}</span>
+      <span class="forecast-step-label">NOW</span>
+      <span class="forecast-step-risk">{{ '%.0f'|format(current.risk * 100) }}%</span>
+      <span class="forecast-step-stage">{{ current.stage }}</span>
     </div>
     {% if forecast_steps is defined %}
-    {% for step in forecast_steps %}
-    <div class="forecast-step">
-      <span class="step-label">+{{ step.step }}</span>
-      <span class="step-risk">{{ '%.0f'|format(step.risk * 100) }}%</span>
-      <span class="step-stage">{{ step.stage }}</span>
-    </div>
-    {% endfor %}
+      {% for step in forecast_steps %}
+      <div class="forecast-step">
+        <span class="forecast-step-label">+{{ step.step }}</span>
+        <span class="forecast-step-risk">{{ '%.0f'|format(step.risk * 100) }}%</span>
+        <span class="forecast-step-stage">{{ step.stage }}</span>
+      </div>
+      {% endfor %}
     {% endif %}
   </div>
 </div>

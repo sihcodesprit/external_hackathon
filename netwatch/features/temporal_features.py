@@ -61,8 +61,11 @@ def compute_temporal_features(records: List[Dict],
     iat_autocorr = 0.0
     if len(iats) > 1:
         try:
-            iat_autocorr = float(np.corrcoef(iats[:-1], iats[1:])[0, 1])
-            if np.isnan(iat_autocorr):
+            if np.std(iats[:-1]) > 0 and np.std(iats[1:]) > 0:
+                iat_autocorr = float(np.corrcoef(iats[:-1], iats[1:])[0, 1])
+                if np.isnan(iat_autocorr):
+                    iat_autocorr = 0.0
+            else:
                 iat_autocorr = 0.0
         except Exception:
             iat_autocorr = 0.0
@@ -89,9 +92,11 @@ def compute_temporal_features(records: List[Dict],
             if np.any(pos_mask):
                 pos_power = power[pos_mask]
                 pos_freqs = freqs[pos_mask]
-                max_idx = np.argmax(pos_power)
-                fft_dominant_freq = float(pos_freqs[max_idx])
-                fft_spectral_power = float(pos_power[max_idx] / np.sum(pos_power))
+                total_power = float(np.sum(pos_power))
+                if total_power > 0:
+                    max_idx = np.argmax(pos_power)
+                    fft_dominant_freq = float(pos_freqs[max_idx])
+                    fft_spectral_power = float(pos_power[max_idx] / total_power)
         except Exception:
             pass
     

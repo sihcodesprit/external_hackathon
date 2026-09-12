@@ -19,6 +19,7 @@ import logging
 import os
 import tempfile
 import threading
+from datetime import datetime
 from pathlib import Path
 from werkzeug.utils import secure_filename
 
@@ -61,6 +62,225 @@ def _allowed_file(filename: str) -> bool:
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
 
 
+def _install_model_zip(zip_buffer) -> dict:
+    """Extract and install a netwatch_trained_models.zip bundle, then reload the pipeline."""
+    import zipfile
+    import shutil
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+        zip_buffer.save(tmp.name)
+        tmp_path = Path(tmp.name)
+
+    filename = secure_filename(zip_buffer.filename or "netwatch_trained_models.zip")
+    try:
+        extract_temp = Path(tempfile.mkdtemp(prefix="nw_model_upload_"))
+        with zipfile.ZipFile(tmp_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_temp)
+
+        data_models_dir = Path("data/data/models")
+        data_models_dir.mkdir(parents=True, exist_ok=True)
+        checkpoints_dir = Path("models/checkpoints")
+        checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+        installed = []
+        for root, _, files in os.walk(extract_temp):
+            for f in files:
+                if f.endswith(('.pt', '.pkl', '.json', '.npz')):
+                    src_file = Path(root) / f
+                    shutil.copy2(src_file, data_models_dir / f)
+                    if f in ("world_model_lstm.pt", "registry.json", "feature_scaler.pkl", "ensemble_baselines.pkl"):
+                        shutil.copy2(src_file, checkpoints_dir / f)
+                    installed.append(f)
+
+        shutil.rmtree(extract_temp, ignore_errors=True)
+
+        if not installed:
+            return {"error": "No valid model artifacts (.pt, .pkl, .json) found in zip file."}
+
+        logger.info(f"Imported {len(installed)} model files from uploaded zip: {installed}")
+
+        # Reload the in-memory pipeline so the new weights activate immediately
+        global _pipeline_cache
+        with _pipeline_lock:
+            _pipeline_cache.clear()
+            try:
+                pipe = Pipeline()
+                pipe.load_pretrained()
+                pipe.forecast_and_simulate()
+                _pipeline_cache["default"] = pipe
+                activated = True
+            except Exception as e:
+                logger.warning(f"New models installed but failed to reload pipeline: {e}")
+                activated = False
+
+        return {
+            "status": "ok",
+            "type": "model_package",
+            "filename": filename,
+            "n_models": len(installed),
+            "files": installed,
+            "activated": activated,
+            "message": (
+                f"Successfully imported and activated {len(installed)} model files from {filename}."
+                if activated else
+                f"Imported {len(installed)} model files, but in-memory reload failed."
+            ),
+        }
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+def _inspect_model_artifacts() -> dict:
+    """Return metadata about the installed model artifacts for the Models page."""
+    registry_models = []
+    try:
+        registry_models = _build_pipeline().model_registry.list_models()
+    except Exception as e:
+        logger.warning(f"Could not read model registry: {e}")
+
+    artifacts = []
+    for d in (Path("data/data/models"),):
+        if not d.exists():
+            continue
+        for f in sorted(d.iterdir()):
+            if f.suffix.lower() in (".pt", ".pkl", ".json", ".npz"):
+                try:
+                    size_kb = f.stat().st_size / 1024.0
+                except OSError:
+                    size_kb = 0.0
+                artifacts.append({
+                    "name": f.name,
+                    "size_kb": round(size_kb, 1),
+                    "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat()
+                        if f.stat().st_mtime else "",
+                })
+
+    return {
+        "registry_models": registry_models,
+        "artifacts": artifacts,
+        "active_meta": _pipeline_cache.get("upload_meta", {}),
+    }
+
+
+def _process_traffic_records(records: list, filename: str) -> dict:
+    """Process traffic records through the pipeline and return result dict."""
+    if not records:
+        return {"error": "No valid packet or flow records found."}
+    
+    pipe = _build_pipeline()
+    data_info = pipe.load_data(records=records)
+    states = pipe.states
+    if not states:
+        return {"error": "Traffic was parsed, but not enough temporal windows could be formed to build network states."}
+
+    sim_out = pipe.forecast_and_simulate(k=5)
+    forecast = sim_out["forecast"]
+    graph = sim_out["graph"]
+    counterfactual = sim_out["counterfactual"]
+    mitre = sim_out.get("mitre_trajectory", [])
+
+    scorer = EnsembleScorer(pipeline=pipe)
+    ensemble_res = scorer.evaluate_traffic(records=records, states=states, k_steps=5)
+
+    global _pipeline_cache
+    with _pipeline_lock:
+        _pipeline_cache["default"] = pipe
+        _pipeline_cache["upload_meta"] = {
+            "filename": filename,
+            "n_records": len(records),
+            "n_states": len(states),
+            "uploaded_at": datetime.now().isoformat(),
+        }
+
+    return {
+        "status": "ok",
+        "type": "traffic_data",
+        "n_records": len(records),
+        "n_states": len(states),
+        "forecast": forecast,
+        "graph": graph,
+        "counterfactual": counterfactual,
+        "mitre_trajectory": mitre,
+        "ensemble": ensemble_res,
+    }
+
+
+def _process_zip_traffic(file, original_filename: str) -> dict:
+    """Extract traffic file (.pcap/.pcapng/.csv/.jsonl) from a ZIP archive and process it.
+    
+    If the ZIP contains model artifacts instead, falls back to _install_model_zip.
+    """
+    import zipfile
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+        file.save(tmp.name)
+        tmp_path = Path(tmp.name)
+    
+    try:
+        with zipfile.ZipFile(tmp_path, 'r') as zip_ref:
+            # List all members
+            members = zip_ref.namelist()
+            if not members:
+                return {"error": "ZIP file is empty."}
+            
+            # Find traffic files (prefer pcap > csv > jsonl)
+            traffic_members = []
+            model_artifacts = []
+            
+            for member in members:
+                if member.endswith('/'):
+                    continue
+                suffix = Path(member).suffix.lower()
+                if suffix in {".pcap", ".pcapng", ".csv", ".jsonl"}:
+                    traffic_members.append((member, suffix))
+                elif suffix in {".pt", ".pkl", ".json", ".npz"}:
+                    model_artifacts.append(member)
+            
+            # If traffic files found, extract the best one
+            if traffic_members:
+                # Priority: .pcapng > .pcap > .csv > .jsonl
+                priority = {".pcapng": 0, ".pcap": 1, ".csv": 2, ".jsonl": 3}
+                traffic_members.sort(key=lambda x: priority.get(x[1], 99))
+                member_name, member_suffix = traffic_members[0]
+                
+                # Extract to temp file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=member_suffix) as extract_tmp:
+                    extract_tmp_path = Path(extract_tmp.name)
+                try:
+                    with zipfile.ZipFile(tmp_path, 'r') as zf:
+                        zf.extract(member_name, path=extract_tmp_path.parent)
+                    extracted = extract_tmp_path.parent / member_name
+                    
+                    # Determine kind from suffix
+                    if member_suffix in {".pcap", ".pcapng"}:
+                        kind = "pcap"
+                    elif member_suffix == ".csv":
+                        kind = "csv"
+                    else:
+                        kind = "jsonl"
+                    
+                    records = ingest(extracted, kind=kind)
+                    result = _process_traffic_records(records, original_filename)
+                    if "error" not in result:
+                        result["source_in_zip"] = member_name
+                    return result
+                finally:
+                    if extracted.exists():
+                        extracted.unlink(missing_ok=True)
+                    if extract_tmp_path.exists():
+                        extract_tmp_path.unlink(missing_ok=True)
+            
+            # If model artifacts found, delegate to model installer
+            if model_artifacts:
+                # Reset file pointer for _install_model_zip
+                file.stream.seek(0)
+                return _install_model_zip(file)
+            
+            return {"error": "No traffic files (.pcap, .pcapng, .csv, .jsonl) or model artifacts found in ZIP."}
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 def _process_uploaded_file(file, file_type: str) -> dict:
     try:
         if not file or not file.filename:
@@ -71,57 +291,9 @@ def _process_uploaded_file(file, file_type: str) -> dict:
 
         suffix = Path(filename).suffix.lower()
 
-        # ── Handle .zip Model Bundle Upload ───────────────────
+        # ── Handle .zip: auto-detect traffic vs model bundle ────────
         if suffix == ".zip":
-            import zipfile
-            import shutil
-            from netwatch.config import MODEL_DIR
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
-                file.save(tmp.name)
-                tmp_path = Path(tmp.name)
-                
-            try:
-                extract_temp = Path(tempfile.mkdtemp(prefix="nw_model_upload_"))
-                with zipfile.ZipFile(tmp_path, 'r') as zip_ref:
-                    zip_ref.extractall(extract_temp)
-
-                data_models_dir = Path("data/data/models")
-                data_models_dir.mkdir(parents=True, exist_ok=True)
-                checkpoints_dir = Path("models/checkpoints")
-                checkpoints_dir.mkdir(parents=True, exist_ok=True)
-
-                installed = []
-                for root, _, files in os.walk(extract_temp):
-                    for f in files:
-                        if f.endswith(('.pt', '.pkl', '.json', '.npz')):
-                            src_file = Path(root) / f
-                            shutil.copy2(src_file, data_models_dir / f)
-                            if f in ("world_model_lstm.pt", "registry.json", "feature_scaler.pkl", "ensemble_baselines.pkl"):
-                                shutil.copy2(src_file, checkpoints_dir / f)
-                            installed.append(f)
-
-                shutil.rmtree(extract_temp, ignore_errors=True)
-
-                # Invalidate in-memory pipeline cache so new models load
-                global _pipeline_cache
-                with _pipeline_lock:
-                    _pipeline_cache.clear()
-
-                if not installed:
-                    return {"error": "No valid model artifacts (.pt, .pkl, .json) found in zip file."}
-
-                logger.info(f"Imported {len(installed)} model files from uploaded zip: {installed}")
-                return {
-                    "status": "ok",
-                    "type": "model_package",
-                    "filename": filename,
-                    "n_models": len(installed),
-                    "files": installed,
-                    "message": f"Successfully imported and activated {len(installed)} model files from {filename}."
-                }
-            finally:
-                tmp_path.unlink(missing_ok=True)
+            return _process_zip_traffic(file, filename)
 
         # ── Handle Network Traffic Ingestion (PCAP / CSV / JSONL) ──
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp:
@@ -132,34 +304,7 @@ def _process_uploaded_file(file, file_type: str) -> dict:
             if not records:
                 return {"error": "No valid packet or flow records found in uploaded file."}
             
-            pipe = _build_pipeline()
-            # Load real traffic records into active pipeline
-            data_info = pipe.load_data(records=records)
-            states = pipe.states
-            if not states:
-                return {"error": "Traffic was parsed, but not enough temporal windows could be formed to build network states."}
-
-            sim_out = pipe.forecast_and_simulate(k=5)
-            forecast = sim_out["forecast"]
-            graph = sim_out["graph"]
-            counterfactual = sim_out["counterfactual"]
-            mitre = sim_out.get("mitre_trajectory", [])
-
-            # Run multi-tool ensemble scoring
-            scorer = EnsembleScorer(pipeline=pipe)
-            ensemble_res = scorer.evaluate_traffic(records=records, states=states, k_steps=5)
-
-            return {
-                "status": "ok",
-                "type": "traffic_data",
-                "n_records": len(records),
-                "n_states": len(states),
-                "forecast": forecast,
-                "graph": graph,
-                "counterfactual": counterfactual,
-                "mitre_trajectory": mitre,
-                "ensemble": ensemble_res,
-            }
+            return _process_traffic_records(records, filename)
         finally:
             tmp_path.unlink(missing_ok=True)
     except Exception as e:
@@ -173,6 +318,18 @@ def create_app():
     app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
     app.jinja_env.globals["zip"] = zip
     app.jinja_env.globals["enumerate"] = enumerate
+    
+    def get_stage_badge_class(stage):
+        s = (stage or "").lower()
+        if "recon" in s or "discovery" in s:
+            return "badge-info"
+        if "initial" in s or "execution" in s or "privilege" in s or "defense" in s or "credential" in s:
+            return "badge-warning"
+        if "lateral" in s or "collection" in s or "exfil" in s or "command" in s or "impact" in s:
+            return "badge-danger"
+        return "badge-neutral"
+    
+    app.jinja_env.globals["getStageBadgeClass"] = get_stage_badge_class
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-production")
 
     @app.after_request
@@ -272,15 +429,74 @@ def create_app():
                     file_type = "pcap"
                 elif file.filename.lower().endswith(".csv"):
                     file_type = "csv"
+                elif file.filename.lower().endswith(".zip"):
+                    file_type = "zip"
                 else:
                     file_type = "jsonl"
             result = _process_uploaded_file(file, file_type)
             if "error" in result:
                 flash(f"Error: {result['error']}")
                 return redirect(request.url)
-            return render_template("upload_result.html", version=__version__,
-                                   result=result, filename=file.filename)
+            return render_template("upload_result.html", version=__version__, result=result, filename=file.filename)
         return render_template("upload.html", version=__version__)
+
+    @app.route("/models", methods=["GET", "POST"])
+    def models():
+        """Dedicated Model Management page — upload .zip bundles, view active weights, reload."""
+        if request.method == "POST":
+            if "model_zip" not in request.files or request.files["model_zip"].filename == "":
+                flash("No model zip file selected")
+                return redirect("/models")
+            file = request.files["model_zip"]
+            if not file.filename.lower().endswith(".zip"):
+                flash("Model upload must be a .zip file (e.g. netwatch_trained_models.zip)")
+                return redirect("/models")
+            result = _install_model_zip(file)
+            if "error" in result:
+                flash(f"Error: {result['error']}")
+            else:
+                flash(f"✓ {result['message']}")
+            return redirect("/models")
+
+        info = _inspect_model_artifacts()
+        return render_template("models.html", version=__version__,
+                               models=info["registry_models"],
+                               artifacts=info["artifacts"],
+                               active_meta=info["active_meta"])
+
+    @app.route("/models/reload", methods=["POST"])
+    def models_reload():
+        """Reload pre-trained weights from disk into the active pipeline,
+        preserving any currently-uploaded traffic session."""
+        global _pipeline_cache
+        with _pipeline_lock:
+            prev = _pipeline_cache.get("default")
+            prev_states = list(prev.states) if prev is not None else []
+            prev_meta = _pipeline_cache.get("upload_meta", {})
+            _pipeline_cache.clear()
+            try:
+                pipe = Pipeline()
+                ok = pipe.load_pretrained()
+                if prev_states:
+                    pipe.states = prev_states
+                    pipe.forecast_and_simulate()
+                _pipeline_cache["default"] = pipe
+                if prev_meta:
+                    _pipeline_cache["upload_meta"] = prev_meta
+                reloaded = True
+                message = ("Pre-trained weights reloaded and active." if ok
+                           else "Models reloaded, but no pre-trained weights found on disk.")
+            except Exception as e:
+                logger.error(f"Failed to reload models: {e}")
+                _pipeline_cache.pop("default", None)
+                return jsonify({"status": "error", "message": str(e)}), 500
+        n_models = len(_inspect_model_artifacts()["artifacts"])
+        return jsonify({
+            "status": "ok" if reloaded else "degraded",
+            "message": message,
+            "n_models": n_models,
+            "preserved_states": len(prev_states),
+        })
 
     @app.route("/ensemble", methods=["GET", "POST"])
     def ensemble():
@@ -298,6 +514,8 @@ def create_app():
                     file_type = "pcap"
                 elif file.filename.lower().endswith(".csv"):
                     file_type = "csv"
+                elif file.filename.lower().endswith(".zip"):
+                    file_type = "zip"
                 else:
                     file_type = "jsonl"
             result = _process_uploaded_file(file, file_type)
@@ -387,6 +605,21 @@ def create_app():
     def api_models():
         pipe = _build_pipeline()
         return jsonify(pipe.model_registry.list_models())
+
+    @app.route("/api/models/status")
+    def api_models_status():
+        info = _inspect_model_artifacts()
+        active_meta = _pipeline_cache.get("upload_meta", {})
+        return jsonify({
+            "registry_models": info["registry_models"],
+            "artifacts": info["artifacts"],
+            "active_traffic": {
+                "filename": active_meta.get("filename"),
+                "n_records": active_meta.get("n_records", 0),
+                "n_states": active_meta.get("n_states", 0),
+                "uploaded_at": active_meta.get("uploaded_at"),
+            },
+        })
 
     @app.route("/api/scenario", methods=["POST"])
     def api_scenario():

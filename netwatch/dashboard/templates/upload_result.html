@@ -1,236 +1,102 @@
 {% extends "base.html" %}
-{% block title %}Upload Results — Counterfactual Cyber World{% endblock %}
+{% block title %}Upload Results — NetWatch{% endblock %}
+{% block breadcrumb %}Results{% endblock %}
+{% block page_title %}Analysis Results{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Analysis & Ingestion Results</h1>
   {% if result.type == 'model_package' %}
-    <p>Model Package: <strong>{{ filename }}</strong> &middot; Installed <strong>{{ result.n_models }}</strong> model artifacts</p>
+  <p>Model Package: <strong>{{ filename }}</strong> &middot; Installed <strong>{{ result.n_models }}</strong> model artifacts</p>
   {% else %}
-    <p>File: <strong>{{ filename }}</strong> &mdash; {{ result.n_records }} records, {{ result.n_states }} network states</p>
+  <p>File: <strong>{{ filename }}</strong> &mdash; {{ result.n_records }} records, {{ result.n_states }} network states{% if result.source_in_zip %} (extracted from {{ result.source_in_zip }}){% endif %}</p>
   {% endif %}
 </div>
 
 {% if result.type == 'model_package' %}
-<!-- ── Model Package Success Banner ──────────────────────────── -->
-<div class="card" style="border-left: 5px solid var(--good); background: rgba(46, 204, 113, 0.08); margin-bottom: 24px;">
-  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
-    <h3 style="margin: 0; color: var(--good); font-size: 20px;">
-      ✓ Trained Models Successfully Installed & Activated!
-    </h3>
-    <span class="badge-level badge-good" style="font-size: 13px; padding: 4px 12px;">Models Ready</span>
-  </div>
-  <p style="color: var(--text); margin-bottom: 16px;">
-    {{ result.message }}
-  </p>
-  <h4 style="margin: 12px 0 8px; font-size: 14px; color: var(--accent);">Installed Artifacts:</h4>
-  <ul style="margin: 0 0 16px 20px; color: var(--text);">
-    {% for f in result.files %}
-      <li style="margin-bottom: 4px;"><code>{{ f }}</code></li>
-    {% endfor %}
-  </ul>
-  <div style="display: flex; gap: 12px; margin-top: 16px;">
-    <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Open SOC Dashboard</a>
-    <a href="{{ url_for('ensemble') }}" class="btn btn-secondary">Open Ensemble Scorer</a>
-    <a href="{{ url_for('test_center') }}" class="btn btn-secondary">Run Model Test Suite</a>
+<div class="alert alert-success" style="margin-bottom:var(--space-lg);">
+  <svg class="alert-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+  <div class="alert-content">
+    <div class="alert-title">✓ Trained Models Successfully Installed & Activated!</div>
+    <p>{{ result.message }}</p>
+    <h4 style="margin:var(--space-md) 0 var(--space-sm);font-size:0.9rem;color:var(--accent);">Installed Artifacts:</h4>
+    <ul style="margin:0 0 var(--space-md) var(--space-lg);">{% for f in result.files %}<li style="margin-bottom:4px;"><code>{{ f }}</code></li>{% endfor %}</ul>
+    <div style="display:flex;gap:var(--space-sm);flex-wrap:wrap;">
+      <a href="/dashboard" class="btn btn-primary">Open SOC Dashboard</a>
+      <a href="/ensemble" class="btn btn-secondary">Open Ensemble Scorer</a>
+      <a href="/test-center" class="btn btn-secondary">Run Model Test Suite</a>
+    </div>
   </div>
 </div>
 {% endif %}
 
 {% if result.type != 'model_package' %}
 {% if result.ensemble %}
-<!-- ── Ensemble Scoring Consensus Card ────────────────────────── -->
-<div class="card" style="border-left: 5px solid {% if result.ensemble.consensus.verdict_badge == 'critical' or result.ensemble.consensus.verdict_badge == 'danger' %}var(--danger){% elif result.ensemble.consensus.verdict_badge == 'high' or result.ensemble.consensus.verdict_badge == 'warning' %}#e67e22{% else %}var(--good){% endif %}; margin-bottom: 20px;">
-  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
-    <h3 style="margin: 0; color: var(--text);">Ensemble Threat Consensus</h3>
-    <span class="badge-level badge-{{ result.ensemble.consensus.verdict_badge }}" style="font-size: 14px; padding: 4px 12px;">
-      {{ result.ensemble.consensus.threat_level }} &middot; {{ result.ensemble.consensus.threat_status }}
-    </span>
+<div class="card" style="margin-bottom:var(--space-lg);border-left:4px solid {{ 'var(--danger)' if result.ensemble.consensus.verdict_badge in ('critical','danger') else 'var(--warning)' if result.ensemble.consensus.verdict_badge in ('high','warning') else 'var(--success)' }};">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-sm);margin-bottom:var(--space-md);">
+    <h3 class="card-title">Ensemble Threat Consensus</h3>
+    <span class="badge badge-level badge-{{ result.ensemble.consensus.verdict_badge }}">{{ result.ensemble.consensus.threat_level }} &middot; {{ result.ensemble.consensus.threat_status }}</span>
   </div>
-
-  <div class="grid" style="grid-template-columns: 140px 1fr 1fr; align-items: center; gap: 20px;">
-    <!-- Consensus Gauge -->
-    <div style="text-align: center;">
-      <div class="risk-gauge" style="--risk: {{ '%.2f'|format(result.ensemble.consensus.score_raw) }}; --hue: {{ (1.0 - result.ensemble.consensus.score_raw) * 120 }}; width: 120px; height: 120px; margin: 0 auto;">
-        <span class="gauge-value" style="font-size: 24px; font-weight: 800;">{{ result.ensemble.consensus.score }}%</span>
-      </div>
-      <small class="muted">Consensus Score</small>
-    </div>
-
-    <!-- Agreement & MITRE -->
-    <div>
-      <div style="font-size: 13px; color: var(--muted); margin-bottom: 4px;">Engine Agreement</div>
-      <div style="font-size: 20px; font-weight: 700; color: var(--accent);">
-        {{ result.ensemble.consensus.agreement_count }} / {{ result.ensemble.consensus.total_detectors }} Engines
-      </div>
-      <div class="progress-bar-container" style="background: var(--panel-2); height: 6px; border-radius: 3px; overflow: hidden; margin: 6px 0 10px;">
-        <div style="width: {{ result.ensemble.consensus.agreement_pct }}%; height: 100%; background: {% if result.ensemble.consensus.agreement_pct >= 60 %}var(--danger){% else %}var(--good){% endif %};"></div>
-      </div>
-      <div style="font-size: 12px; color: var(--text);">
-        Primary Stage: <strong>{{ result.ensemble.consensus.primary_stage }}</strong> ({{ result.ensemble.consensus.mitre.technique_id }})
-      </div>
-    </div>
-
-    <!-- Executive Summary -->
-    <div style="background: var(--panel-2); padding: 10px 14px; border-radius: 8px; font-size: 12.5px; line-height: 1.5;">
-      {{ result.ensemble.consensus.summary }}
-    </div>
+  <div class="grid" style="grid-template-columns:120px 1fr 1fr;align-items:center;gap:var(--space-md);">
+    <div style="text-align:center;"><div class="risk-gauge" style="--risk:{{ '%.2f'|format(result.ensemble.consensus.score_raw) }};width:100px;height:100px;margin:0 auto;"></div><small class="muted">Consensus Score</small></div>
+    <div><div class="muted" style="font-size:0.75rem;">Engine Agreement</div><div style="font-size:1.25rem;font-weight:700;color:var(--accent);">{{ result.ensemble.consensus.agreement_count }} / {{ result.ensemble.consensus.total_detectors }} Engines</div><div class="progress-bar"><div class="progress-bar-fill {{ 'danger' if result.ensemble.consensus.agreement_pct >= 60 else 'success' }}" style="width:{{ result.ensemble.consensus.agreement_pct }}%;"></div></div><div style="font-size:0.8rem;color:var(--text-secondary);">Primary Stage: <strong>{{ result.ensemble.consensus.primary_stage }}</strong> ({{ result.ensemble.consensus.mitre.technique_id }})</div></div>
+    <div style="background:var(--bg-panel);padding:var(--space-md);border-radius:var(--radius-md);font-size:0.85rem;line-height:1.6;">{{ result.ensemble.consensus.summary }}</div>
   </div>
-
-  <!-- Multi-Detector Breakdown Table -->
-  <h4 style="margin: 16px 0 8px; font-size: 14px; color: var(--accent);">Multi-Script Detector Breakdown (8 Engines)</h4>
-  <table>
-    <thead>
-      <tr>
-        <th>Detection Engine</th>
-        <th>Category</th>
-        <th>Threat Score</th>
-        <th>Verdict</th>
-        <th>Key Evidence</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for d in result.ensemble.detectors %}
-      <tr>
-        <td><strong>{{ d.name }}</strong></td>
-        <td class="muted">{{ d.category }}</td>
-        <td>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div style="width: 60px; background: var(--panel-2); height: 6px; border-radius: 3px; overflow: hidden;">
-              <div style="width: {{ '%.0f'|format(d.score * 100) }}%; height: 100%; background: {% if d.score >= 0.5 %}var(--danger){% else %}var(--good){% endif %};"></div>
-            </div>
-            <span>{{ '%.0f'|format(d.score * 100) }}%</span>
-          </div>
-        </td>
-        <td><span class="badge-detector badge-{{ d.badge }}">{{ d.verdict }}</span></td>
-        <td class="muted" style="font-size: 12px;">{{ d.details }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <h4 style="margin:var(--space-lg) 0 var(--space-sm);font-size:0.9rem;color:var(--accent);">Multi-Script Detector Breakdown (8 Engines)</h4>
+  <div class="table-container"><table class="data-table"><thead><tr><th>Detection Engine</th><th>Category</th><th>Threat Score</th><th>Verdict</th><th>Key Evidence</th></tr></thead><tbody>{% for d in result.ensemble.detectors %}<tr><td><strong>{{ d.name }}</strong></td><td class="muted">{{ d.category }}</td><td><div style="display:flex;align-items:center;gap:var(--space-sm);"><div style="width:60px;background:var(--bg-input);height:6px;border-radius:3px;overflow:hidden;"><div style="width:{{ '%.0f'|format(d.score*100) }}%;height:100%;background:{{ 'var(--danger)' if d.score>=0.5 else 'var(--success)' }};"></div></div><span>{{ '%.0f'|format(d.score*100) }}%</span></div></td><td><span class="badge badge-{{ d.badge }}">{{ d.verdict }}</span></td><td class="muted" style="font-size:0.8rem;">{{ d.details }}</td></tr>{% endfor %}</tbody></table></div>
 </div>
 {% endif %}
 
 {% if result.forecast %}
-<div class="grid">
+<div class="grid grid-3" style="margin-bottom:var(--space-lg);">
   <div class="card">
-    <h3>Current Risk</h3>
-    <div class="risk-gauge" style="--risk: {{ '%.2f'|format(result.forecast.current.risk) }};">
-      <span class="gauge-value">{{ '%.0f'|format(result.forecast.current.risk * 100) }}%</span>
-    </div>
-    <p class="muted">Stage: {{ result.forecast.current.stage }}</p>
+    <div class="card-header"><h3 class="card-title">Current Risk</h3></div>
+    <div class="risk-gauge" style="--risk:{{ '%.2f'|format(result.forecast.current.risk) }};"></div>
+    <p class="muted" style="text-align:center;margin-top:var(--space-sm);">Stage: {{ result.forecast.current.stage }}</p>
   </div>
-
   <div class="card">
-    <h3>Recommended Action</h3>
-    <div class="stage-badge action">{{ result.counterfactual.recommendation.recommended_label }}</div>
-    <p class="muted">{{ result.counterfactual.recommendation.reason }}</p>
+    <div class="card-header"><h3 class="card-title">Recommended Action</h3></div>
+    <div class="recommendation-box"><div class="stage-badge action">{{ result.counterfactual.recommendation.recommended_label }}</div><p class="muted">{{ result.counterfactual.recommendation.reason }}</p></div>
   </div>
-
   <div class="card">
-    <h3>5-Step Forecast</h3>
-    <table>
-      <thead><tr><th>Step</th><th>Risk</th><th>Stage</th><th>Confidence</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>Current</td>
-          <td>{{ '%.0f'|format(result.forecast.current.risk * 100) }}%</td>
-          <td>{{ result.forecast.current.stage }}</td>
-          <td>{{ '%.0f'|format(result.forecast.current.get('confidence', 0) * 100) }}%</td>
-        </tr>
-        {% for step in result.forecast.future %}
-        <tr>
-          <td>+{{ step.step }}</td>
-          <td>{{ '%.0f'|format(step.risk * 100) }}%</td>
-          <td>{{ step.stage }}</td>
-          <td>{{ '%.0f'|format(step.get('confidence', 0) * 100) }}%</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="card-header"><h3 class="card-title">5-Step Forecast</h3></div>
+    <div class="table-container"><table class="data-table"><thead><tr><th>Step</th><th>Risk</th><th>Stage</th><th>Confidence</th></tr></thead><tbody><tr><td>Current</td><td>{{ '%.0f'|format(result.forecast.current.risk*100) }}%</td><td>{{ result.forecast.current.stage }}</td><td>{{ '%.0f'|format(result.forecast.current.get('confidence',0)*100) }}%</td></tr>{% for step in result.forecast.future %}<tr><td>+{{ step.step }}</td><td>{{ '%.0f'|format(step.risk*100) }}%</td><td>{{ step.stage }}</td><td>{{ '%.0f'|format(step.get('confidence',0)*100) }}%</td></tr>{% endfor %}</tbody></table></div>
   </div>
 </div>
 
-<div class="card">
-  <h3>Counterfactual Simulation</h3>
-  <canvas id="cfChart" height="150"></canvas>
-  <table>
-    <thead><tr><th>Action</th><th>Final Risk</th><th>Peak Risk</th><th>Description</th></tr></thead>
-    <tbody>
-    {% for aid, r in result.counterfactual.results.items() %}
-      <tr {% if aid == result.counterfactual.recommendation.recommended_action %}class="recommended"{% endif %}>
-        <td>{{ r.label }}</td>
-        <td>{{ '%.0f'|format(r.final_risk * 100) }}%</td>
-        <td>{{ '%.0f'|format(r.peak_risk * 100) }}%</td>
-        <td class="muted">{{ r.description }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="card" style="margin-bottom:var(--space-lg);">
+  <div class="card-header"><h3 class="card-title">Counterfactual Simulation</h3></div>
+  <canvas id="cfChart" height="180" style="width:100%;margin-bottom:var(--space-md);"></canvas>
+  <div class="table-container"><table class="cf-table"><thead><tr><th>Action</th><th>Final Risk</th><th>Peak Risk</th><th>Description</th></tr></thead><tbody>{% for aid,r in result.counterfactual.results.items() %}<tr {% if aid==result.counterfactual.recommendation.recommended_action %}class="recommended"{% endif %}><td><span class="action-label">{{ r.label }}</span>{% if aid==result.counterfactual.recommendation.recommended_action %} <span class="badge badge-success">Recommended</span>{% endif %}</td><td class="risk-value {{ 'danger' if r.final_risk>0.5 else 'warning' if r.final_risk>0.2 else 'success' }}">{{ '%.0f'|format(r.final_risk*100) }}%</td><td class="risk-value {{ 'danger' if r.peak_risk>0.5 else 'warning' if r.peak_risk>0.2 else 'success' }}">{{ '%.0f'|format(r.peak_risk*100) }}%</td><td class="description">{{ r.description }}</td></tr>{% endfor %}</tbody></table></div>
 </div>
 
-<div class="card">
-  <h3>MITRE ATT&CK Trajectory</h3>
-  <table>
-    <thead><tr><th>Step</th><th>Stage</th><th>Tactic</th><th>Technique</th></tr></thead>
-    <tbody>
-    {% for i, m in enumerate(result.mitre_trajectory) %}
-      <tr>
-        <td>{% if i == 0 %}Current{% else %}+{{ i }}{% endif %}</td>
-        <td>{{ m.stage }}</td>
-        <td>{{ m.tactic }}</td>
-        <td>{{ m.technique_id }}: {{ m.technique_name }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="card" style="margin-bottom:var(--space-lg);">
+  <div class="card-header"><h3 class="card-title">MITRE ATT&CK Trajectory</h3></div>
+  <div class="table-container"><table class="data-table"><thead><tr><th>Step</th><th>Stage</th><th>Tactic</th><th>Technique</th></tr></thead><tbody>{% for i,m in enumerate(result.mitre_trajectory) %}<tr><td>{% if i==0 %}Current{% else %}+{{ i }}{% endif %}</td><td>{{ m.stage }}</td><td>{{ m.tactic }}</td><td>{{ m.technique_id }}: {{ m.technique_name }}</td></tr>{% endfor %}</tbody></table></div>
 </div>
 
 {% if result.forecast.current.explanation and result.forecast.current.explanation.top_features %}
-<div class="card">
-  <h3>Top Contributing Features (Current)</h3>
-  <ul>
-  {% for feat in result.forecast.current.explanation.top_features %}
-    <li>{{ feat.feature.replace('_', ' ').title() }} ({{ feat.sign }}{{ feat.contribution }})</li>
-  {% endfor %}
-  </ul>
+<div class="card" style="margin-bottom:var(--space-lg);">
+  <div class="card-header"><h3 class="card-title">Top Contributing Features (Current)</h3></div>
+  <ul class="detector-evidence-list">{% for feat in result.forecast.current.explanation.top_features %}<li><code>{{ feat.feature.replace('_',' ') }}</code> <span class="contribution {{ feat.sign }}">{{ feat.sign }} {{ feat.contribution }}</span></li>{% endfor %}</ul>
 </div>
 {% endif %}
 {% endif %}
 
 <div class="card">
-  <a href="{{ url_for('upload') }}" class="btn btn-secondary">Analyze Another File</a>
-  <a href="{{ url_for('dashboard') }}" class="btn btn-primary">View Dashboard</a>
+  <a href="/upload" class="btn btn-secondary">Analyze Another File</a>
+  <a href="/dashboard" class="btn btn-primary">View Dashboard</a>
 </div>
 {% endif %}
 {% endblock %}
-
 {% block scripts %}
 {% if result.type != 'model_package' and result.counterfactual %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // Counterfactual chart
-  fetch('/api/counterfactual').then(r => r.json()).then(data => {
-    if (!data || !data.results) return;
-    const labels = Object.keys(data.results).map(k => data.results[k].label);
-    const finals = Object.keys(data.results).map(k => data.results[k].final_risk);
-    const peaks = Object.keys(data.results).map(k => data.results[k].peak_risk);
-    const chartEl = document.getElementById('cfChart');
-    if (!chartEl) return;
-    new Chart(chartEl, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: 'Final Risk', data: finals, backgroundColor: 'rgba(231,76,60,0.7)' },
-          { label: 'Peak Risk', data: peaks, backgroundColor: 'rgba(52,152,219,0.7)' },
-        ],
-      },
-      options: { 
-        responsive: true,
-        scales: { y: { beginAtZero: true, max: 1, ticks: { callback: v => (v*100).toFixed(0) + '%' } } } 
-      },
-    });
-  });
+fetch('/api/counterfactual').then(r=>r.json()).then(data=>{if(!data||!data.results)return;const labels=Object.keys(data.results).map(k=>data.results[k].label);const finals=Object.keys(data.results).map(k=>data.results[k].final_risk);const peaks=Object.keys(data.results).map(k=>data.results[k].peak_risk);const el=document.getElementById('cfChart');if(!el)return;new Chart(el,{type:'bar',data:{labels,datasets:[{label:'Final Risk',data:finals,backgroundColor:'rgba(231,76,60,0.7)'},{label:'Peak Risk',data:peaks,backgroundColor:'rgba(52,152,219,0.7)'}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,max:1,ticks:{callback:v=>(v*100).toFixed(0)+'%'}}}});});
+</script>
+{% endif %}
+{% if result.type != 'model_package' and result.ensemble %}
+<script>
+document.querySelectorAll('.risk-gauge').forEach(g=>{const risk=parseFloat(g.style.getPropertyValue('--risk'))||0;renderRiskGauge(g,risk);});
 </script>
 {% endif %}
 {% endblock %}

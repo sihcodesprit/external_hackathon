@@ -1,61 +1,59 @@
 {% extends "base.html" %}
-{% block title %}Counterfactual Simulation — Counterfactual Cyber World{% endblock %}
+{% block title %}Counterfactual Simulation — NetWatch{% endblock %}
+{% block breadcrumb %}Counterfactual{% endblock %}
+{% block page_title %}Counterfactual{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Counterfactual Defensive Simulation</h1>
-  <p>What-if analysis — each defensive action is simulated by feeding a modified
-  state through the world model. Resulting risk is the model's actual forecast.</p>
+  <p>What-if analysis — each defensive action is simulated by feeding a modified state through the world model.</p>
 </div>
 
 <div class="card">
-  <h3>Recommended Action</h3>
-  <div class="stage-badge action">{{ simulation.recommendation.recommended_label }}</div>
-  <p>{{ simulation.recommendation.reason }}</p>
-  <p class="muted">
-    Baseline risk: {{ '%.0f'|format(simulation.recommendation.baseline_risk|default(0.0)*100) }}%
-    &rarr; After action: {{ '%.0f'|format(simulation.recommendation.counterfactual_risk|default(0.0)*100) }}%
-  </p>
+  <div class="card-header"><h3 class="card-title">Recommended Action</h3></div>
+  <div class="recommendation-box">
+    <div class="stage-badge action">{{ simulation.recommendation.recommended_label }}</div>
+    <p>{{ simulation.recommendation.reason }}</p>
+    <div class="muted">
+      Baseline risk: {{ '%.0f'|format(simulation.recommendation.baseline_risk|default(0.0)*100) }}%
+      &rarr; After action: {{ '%.0f'|format(simulation.recommendation.counterfactual_risk|default(0.0)*100) }}%
+    </div>
+  </div>
 </div>
 
 <div class="card">
-  <h3>All Simulated Actions</h3>
-  <table>
-    <thead><tr><th>Action</th><th>Final Risk</th><th>Peak Risk</th><th>Description</th></tr></thead>
-    <tbody>
-    {% for aid, r in simulation.results.items() %}
-      <tr>
-        <td>{{ r.label }}</td>
-        <td>{{ '%.0f'|format(r.final_risk*100) }}%</td>
-        <td>{{ '%.0f'|format(r.peak_risk*100) }}%</td>
-        <td class="muted">{{ r.description }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="card-header"><h3 class="card-title">All Simulated Actions</h3></div>
+  <div class="table-container">
+    <table class="cf-table">
+      <thead><tr><th>Action</th><th>Final Risk</th><th>Peak Risk</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for aid, r in simulation.results.items() %}
+        <tr {% if aid == simulation.recommendation.recommended_action %}class="recommended"{% endif %}>
+          <td><span class="action-label">{{ r.label }}</span>{% if aid == simulation.recommendation.recommended_action %} <span class="badge badge-success">Recommended</span>{% endif %}</td>
+          <td class="risk-value {{ 'danger' if r.final_risk > 0.5 else 'warning' if r.final_risk > 0.2 else 'success' }}">{{ '%.0f'|format(r.final_risk*100) }}%</td>
+          <td class="risk-value {{ 'danger' if r.peak_risk > 0.5 else 'warning' if r.peak_risk > 0.2 else 'success' }}">{{ '%.0f'|format(r.peak_risk*100) }}%</td>
+          <td class="description">{{ r.description }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <div class="card">
-  <canvas id="cfChart" height="120"></canvas>
+  <div class="card-header"><h3 class="card-title">Risk Comparison</h3></div>
+  <canvas id="cfChart" height="180" style="width:100%;"></canvas>
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  fetch('/api/counterfactual').then(r => r.json()).then(data => {
-    const labels = Object.keys(data.results).map(k => data.results[k].label);
-    const finals = Object.keys(data.results).map(k => data.results[k].final_risk);
-    const peaks = Object.keys(data.results).map(k => data.results[k].peak_risk);
-    new Chart(document.getElementById('cfChart'), {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: 'Final Risk', data: finals, backgroundColor: 'rgba(231,76,60,0.7)' },
-          { label: 'Peak Risk', data: peaks, backgroundColor: 'rgba(52,152,219,0.7)' },
-        ],
-      },
-      options: { scales: { y: { beginAtZero: true, max: 1 } } },
-    });
+fetch('/api/counterfactual').then(r => r.json()).then(data => {
+  const labels = Object.keys(data.results).map(k => data.results[k].label);
+  const finals = Object.keys(data.results).map(k => data.results[k].final_risk);
+  const peaks = Object.keys(data.results).map(k => data.results[k].peak_risk);
+  new Chart(document.getElementById('cfChart'), {
+    type: 'bar', data: { labels, datasets: [{ label: 'Final Risk', data: finals, backgroundColor: 'rgba(231,76,60,0.7)' }, { label: 'Peak Risk', data: peaks, backgroundColor: 'rgba(52,152,219,0.7)' }] },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1, ticks: { callback: v => (v*100).toFixed(0)+'%' } } } }
   });
+});
 </script>
 {% endblock %}

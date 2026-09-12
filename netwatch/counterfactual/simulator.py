@@ -101,8 +101,12 @@ class CounterfactualEngine:
                 risks.append(self._risk_of_vector(raw_vec))
                 horizon = horizon[1:] + [_apply(raw_vec, {})]
 
-            final_risk = risks[-1]
-            peak_risk = float(np.max(risks))
+            final_risk = risks[-1] if risks else baseline_current
+            peak_risk = float(np.max(risks)) if risks else baseline_current
+            if not np.isfinite(final_risk):
+                final_risk = baseline_current
+            if not np.isfinite(peak_risk):
+                peak_risk = baseline_current
 
             results[action_id] = {
                 "action_id": action_id,
@@ -128,7 +132,16 @@ class CounterfactualEngine:
         """
         results = simulation.get("results", {})
         if not results:
-            return {"status": "no_results"}
+            return {
+                "status": "no_results",
+                "recommended_action": "no_action",
+                "recommended_label": "No Action",
+                "baseline_risk": round(simulation.get("baseline_current_risk", 0.0), 4),
+                "counterfactual_risk": round(simulation.get("baseline_current_risk", 0.0), 4),
+                "risk_reduction": 0.0,
+                "risk_reduction_pct_points": 0.0,
+                "reason": "No counterfactual results to compare — keeping natural traffic flow.",
+            }
 
         no_action = results.get("no_action", {})
         baseline = no_action.get("peak_risk",

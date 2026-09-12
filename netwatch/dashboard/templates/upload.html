@@ -1,56 +1,50 @@
 {% extends "base.html" %}
-{% block title %}Upload Traffic Data — Counterfactual Cyber World{% endblock %}
+{% block title %}Upload Network Traffic — NetWatch{% endblock %}
+{% block breadcrumb %}Upload{% endblock %}
+{% block page_title %}Upload Traffic Data{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Upload Network Traffic Data</h1>
-  <p>Upload a PCAP, CSV, or JSONL file to analyze with the Counterfactual Cyber World Model.</p>
+  <p>Upload a PCAP, PCAPNG, CSV, JSONL, or ZIP file to analyze with the Counterfactual Cyber World Model.</p>
 </div>
 
 <div class="card">
-  <h3>Upload File</h3>
-  <form method="POST" enctype="multipart/form-data" id="uploadForm">
-    <div class="form-group">
-      <label for="file">Select File</label>
-      <input type="file" name="file" id="file" accept=".pcap,.pcapng,.csv,.jsonl,.zip" required>
-      <small class="form-text">Max file size: 100MB. Supported formats: PCAP/PCAPNG, CSV, JSONL, or Trained Models (<code>.zip</code>)</small>
+  <div class="card-header"><h3 class="card-title">Upload Traffic File</h3></div>
+  <form method="POST" enctype="multipart/form-data">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Select File (PCAP, PCAPNG, CSV, JSONL, ZIP)</label>
+      <div class="file-input"><input type="file" name="file" id="file" accept=".pcap,.pcapng,.csv,.jsonl,.zip" required><label class="file-input-label" for="file"><span class="file-input-icon">📁</span><span class="file-input-text">Drop file here or click to browse</span><span class="file-input-hint">Max 100MB &middot; ZIP archives auto-extract traffic files</span></label></div>
     </div>
-    
-    <div class="form-group">
-      <label for="file_type">File Type</label>
-      <select name="file_type" id="file_type">
-        <option value="auto">Auto-detect</option>
-        <option value="pcap">PCAP / PCAPNG (Network Traffic)</option>
-        <option value="csv">CSV (Flow Records)</option>
-        <option value="jsonl">JSONL (Packet Records)</option>
-        <option value="zip">ZIP (Trained Model Bundle)</option>
-      </select>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label" for="file_type">File Format</label>
+      <select name="file_type" id="file_type" class="form-select"><option value="auto">Auto-detect</option><option value="pcap">PCAP / PCAPNG</option><option value="csv">CSV (Flow Records)</option><option value="jsonl">JSONL (Packet Records)</option><option value="zip">ZIP Archive</option></select>
     </div>
-    
-    <button type="submit" class="btn btn-primary">Upload & Process</button>
+    <div style="margin-top:var(--space-md);"><button type="submit" class="btn btn-primary btn-lg">Upload & Process</button></div>
   </form>
 </div>
 
+<div class="card" style="margin-top:var(--space-lg);border-left:4px solid var(--accent);">
+  <div class="card-header" style="margin-bottom:var(--space-sm);"><h3 class="card-title" style="color:var(--accent);">Upload Trained Model Weights (.zip)</h3></div>
+  <p class="muted" style="font-size:0.85rem;margin-bottom:var(--space-md);">Install your <code>netwatch_trained_models.zip</code> bundle (from <code>NetWatch_Colab.ipynb</code>). All detection-engine weights are extracted into <code>data/data/models</code> and activated instantly.</p>
+  <form method="POST" action="{{ url_for('models') }}" enctype="multipart/form-data" style="display:grid;grid-template-columns:2fr auto;gap:var(--space-md);align-items:end;">
+    <div class="form-group" style="margin:0;">
+      <div class="file-input"><input type="file" name="model_zip" id="model_zip" accept=".zip" required><label class="file-input-label" for="model_zip"><span class="file-input-icon">📦</span><span class="file-input-text">Drop model zip or click to browse</span><span class="file-input-hint">Accepted: .pt, .pkl, .json, .npz artifacts</span></label></div>
+    </div>
+    <div><button type="submit" class="btn btn-primary">Install & Activate</button></div>
+  </form>
+  <a href="/models" class="btn btn-secondary" style="margin-top:var(--space-sm);">Open Model Manager</a>
+</div>
+
 <div class="card">
-  <h3>Expected Formats</h3>
-  
+  <div class="card-header"><h3 class="card-title">Expected Formats</h3></div>
   <h4>PCAP / PCAPNG</h4>
   <p>Standard packet capture files. The system extracts packet headers, TCP flags, payload sizes, and timing information.</p>
-  
   <h4>CSV (Flow Records)</h4>
   <p>Flow-level CSV with columns like: <code>timestamp, src_ip, dst_ip, src_port, dst_port, protocol, bytes, packets, duration, flags</code></p>
   <p>Supported schemas: CIC-IDS, CTU-13, UNSW-NB15, CICIoT2023, and generic flow formats.</p>
-  
   <h4>JSONL (Packet Records)</h4>
   <p>One JSON object per line with fields: <code>timestamp, src_ip, dst_ip, src_port, dst_port, protocol, flags, bytes_sent, packets, ttl, payload_size, tcp_window, duration</code></p>
+  <h4>ZIP Archive</h4>
+  <p>Upload a ZIP containing any of the above traffic formats. The system will auto-extract and process the first traffic file found (preferring PCAP > CSV > JSONL).</p>
 </div>
-{% endblock %}
-{% block scripts %}
-<script>
-  // Show file name on selection
-  document.getElementById('file').addEventListener('change', function(e) {
-    const fileName = e.target.files[0]?.name || 'No file selected';
-    const label = document.querySelector('label[for="file"]');
-    label.textContent = 'Selected: ' + fileName;
-  });
-</script>
 {% endblock %}
