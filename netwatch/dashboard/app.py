@@ -45,7 +45,7 @@ _pipeline_cache = {}
 _pipeline_lock = threading.Lock()
 
 ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".csv", ".jsonl", ".zip"}
-MAX_FILE_SIZE = 100 * 1024 * 1024
+MAX_FILE_SIZE = int(os.environ.get("NETWATCH_MAX_UPLOAD_MB", "1024")) * 1024 * 1024
 
 # ── Async analysis job manager ────────────────────────────────────────────
 _jobs = {}
@@ -320,9 +320,9 @@ def _extract_zip_member(zip_path: Path, member: str | None):
         fd, tmp_name = tempfile.mkstemp(suffix=suffix)
         os.close(fd)
         extract_path = Path(tmp_name)
-        with extract_path.open("wb") as fout:
-            with zf.open(chosen) as fin:
-                fout.write(fin.read())
+        import shutil
+        with zf.open(chosen) as fin, extract_path.open("wb") as fout:
+            shutil.copyfileobj(fin, fout, length=1024 * 1024)
         return chosen, extract_path
 
 

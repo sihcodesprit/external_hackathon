@@ -27,9 +27,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const ct = res.headers.get("content-type") ?? "";
   if (!res.ok) {
     const detail = ct.includes("json") ? await res.json() : {};
-    throw new Error(
+    const err = new Error(
       `API ${path} → ${res.status}: ${(detail as Record<string, unknown>).error ?? detail.message ?? res.statusText}`,
-    );
+    ) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return ct.includes("json") ? ((await res.json()) as T) : ((await res.text()) as unknown as T);

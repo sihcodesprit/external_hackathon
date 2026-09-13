@@ -23,17 +23,31 @@ export function FileUploader() {
   const { startAnalysis, running } = useAnalysis();
   const [zipInfo, setZipInfo] = useState<ZipInspect | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
   const handleScanZip = useCallback(async (f: File) => {
     setScanning(true);
+    setErrorMsg(null);
     try {
       const info = await api.inspectZip(f);
       setZipInfo(info);
       setFile(f);
-    } catch {
+      if (info.traffic_members.length === 0 && !info.has_models) {
+        setErrorMsg("No capture files (.pcap/.pcapng/.csv/.jsonl) found inside this ZIP.");
+      }
+    } catch (e) {
       setZipInfo(null);
+      const status = (e as { status?: number; response?: { status?: number } }).status
+        ?? (e as { response?: { status?: number } }).response?.status;
+      if (status === 413) {
+        setErrorMsg("This ZIP is larger than the server upload limit. Reduce its size or raise NETWATCH_MAX_UPLOAD_MB.");
+      } else if ((e as Error).message) {
+        setErrorMsg((e as Error).message);
+      } else {
+        setErrorMsg("Could not scan this ZIP archive.");
+      }
     } finally {
       setScanning(false);
     }
@@ -41,6 +55,7 @@ export function FileUploader() {
 
   const handleFile = useCallback(
     (f: File) => {
+      setErrorMsg(null);
       if (f.name.toLowerCase().endsWith(".zip")) {
         handleScanZip(f);
       } else {
@@ -68,13 +83,33 @@ export function FileUploader() {
 
   const onDragLeave = useCallback(() => setDragActive(false), []);
 
-  const start = useCallback(() => {
-    if (file) startAnalysis(file);
+  const start = useCallback(async () => {
+    setErrorMsg(null);
+    try {
+      if (file) await startAnalysis(file);
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      setErrorMsg(
+        status === 413
+          ? "This file is larger than the server upload limit. Reduce its size or raise NETWATCH_MAX_UPLOAD_MB."
+          : (e as Error).message ?? "Analysis failed to start.",
+      );
+    }
   }, [file, startAnalysis]);
 
   const runMember = useCallback(
-    (m: TrafficMember) => {
-      if (file) startAnalysis(file, m.name);
+    async (m: TrafficMember) => {
+      setErrorMsg(null);
+      try {
+        if (file) await startAnalysis(file, m.name);
+      } catch (e) {
+        const status = (e as { status?: number }).status;
+        setErrorMsg(
+          status === 413
+            ? "This ZIP is larger than the server upload limit. Reduce its size or raise NETWATCH_MAX_UPLOAD_MB."
+            : (e as Error).message ?? "Analysis failed to start.",
+        );
+      }
     },
     [file, startAnalysis],
   );
@@ -152,6 +187,22 @@ export function FileUploader() {
         <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
           <span className="loading-spinner" style={{ width: 14, height: 14 }} />
           <span style={{ fontSize: 12, color: palette.textDim }}>Scanning ZIP archive…</span>
+        </div>
+      )}
+      {errorMsg && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: "10px 14px",
+            borderRadius: 8,
+            background: "rgba(239,68,68,0.12)",
+            border: "1px solid rgba(239,68,68,0.4)",
+            color: "#f87171",
+            fontSize: 12,
+            textAlign: "left",
+          }}
+        >
+          {errorMsg}
         </div>
       )}
       {zipInfo && zipInfo.traffic_members.length > 0 && (
