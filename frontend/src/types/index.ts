@@ -478,6 +478,7 @@ export interface ReportDocument {
 export interface AnalysisDoc {
   status: string;
   type: string;
+  analysis_id?: string;
   filename: string | null;
   member: string | null;
   source: string | null;
@@ -499,6 +500,11 @@ export interface AnalysisDoc {
   started_at?: string;
   finished_at?: string;
   elapsed_seconds?: number;
+}
+
+export interface ActiveAnalysisInfo {
+  analysis_id: string | null;
+  doc: AnalysisDoc | null;
 }
 
 export interface TestModuleInfo {

@@ -5,11 +5,14 @@ Builds the single JSON "analysis document" consumed by every frontend screen.
 Every metric is computed from real pipeline/model output — nothing is fabricated.
 """
 
+import logging
 import math
 import statistics
 from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from netwatch.config import get_feature_columns
 from netwatch.features.entropy_features import shannon_entropy
@@ -312,6 +315,86 @@ def analyze_records(records: List[Any], filename: str, member: Optional[str] = N
     }
     tick("Analysis complete", 100, "Results ready.")
     return doc
+
+
+def build_document_from_pipeline(
+    pipe,
+    records: List[Any],
+    filename: str,
+    member: Optional[str] = None,
+    source_label: str = "User Uploaded PCAP",
+    occurrence: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Assemble the canonical analysis document from an already-trained pipeline.
+
+    Used when a Model Test Center "Run All Modules" pass finishes: the pipeline
+    already holds trained states + forecast results, so this rebuilds the same
+    document shape every other screen consumes (Overview, Forecast, Attack
+    Graph, MITRE, Explainability, Counterfactual) — without re-training or
+    re-ingesting the capture.
+    """
+    started = datetime.now()
+    states = getattr(pipe, "states", []) or []
+    forecast = {}
+    graph = {}
+    counterfactual = {}
+    mitre: List[Dict[str, Any]] = []
+    topology = {}
+    entity_summary = {}
+    if getattr(pipe, "results", None):
+        fr = pipe.results.get("forecast", {}) or {}
+        if isinstance(fr, dict):
+            forecast = fr.get("forecast", {}) or {}
+            graph = fr.get("graph", {}) or {}
+            counterfactual = fr.get("counterfactual", {}) or {}
+            mitre = fr.get("mitre_trajectory", []) or []
+            topology = fr.get("network_topology", {}) or {}
+            entity_summary = fr.get("entity_summary", {}) or {}
+
+    ensemble_res = {}
+    try:
+        from netwatch.forecasting.ensemble_scorer import EnsembleScorer
+        scorer = EnsembleScorer(pipeline=pipe)
+        ensemble_res = scorer.evaluate_traffic(records=records, states=states, k_steps=5)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Could not evaluate ensemble for reassembled analysis: %s", e)
+
+    n_attack = sum(1 for s in states if int(s.label or 0) == 1)
+    resolver = getattr(pipe, "entity_resolver", None)
+    net_graph = getattr(pipe, "network_graph", None)
+    data_info = {
+        "n_packets": len(records),
+        "n_states": len(states),
+        "n_attack_states": n_attack,
+        "n_benign_states": len(states) - n_attack,
+        "n_entities": len(resolver.entities) if resolver else 0,
+        "n_graph_nodes": len(net_graph.nodes) if net_graph else 0,
+        "n_graph_edges": len(net_graph.edges) if net_graph else 0,
+    }
+
+    return {
+        "status": "ok",
+        "type": "traffic_data",
+        "filename": filename,
+        "member": member,
+        "source": source_label,
+        "occurrence": occurrence,
+        "n_records": len(records),
+        "n_states": len(states),
+        "traffic_summary": build_traffic_summary(records, states),
+        "network_state": build_network_state_payload(states),
+        "forecast": forecast,
+        "graph": graph,
+        "counterfactual": counterfactual,
+        "mitre_trajectory": mitre,
+        "ensemble": ensemble_res,
+        "topology": topology,
+        "entities": entity_summary,
+        "state_groups": _group_features(states[-1].features) if states else [],
+        "data_info": data_info,
+        "started_at": started.isoformat(),
+        "finished_at": datetime.now().isoformat(),
+    }
 
 
 def _det_stats(records):

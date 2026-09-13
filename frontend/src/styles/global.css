@@ -120,30 +120,43 @@ kbd {
   animation: spin 800ms linear infinite;
 }
 
-@keyframes nodeMount {
+@keyframes pagnPop {
   from {
     opacity: 0;
-    transform: scale(0.86);
+    transform: translateY(6px) scale(0.94);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
-.graph-node {
-  transition: transform 180ms ease, filter 180ms ease, opacity 200ms ease;
-  animation: nodeMount 420ms ease both;
-}
-.graph-node:hover {
-  transform: translateY(-2px);
-}
-.graph-node.graph-node-sel {
-  transform: translateY(-2px) scale(1.03);
+@keyframes pagnEdgeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-.graph-edge {
-  transition: stroke-width 160ms ease;
+.pagn-card {
+  animation: pagnPop 380ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  transition: box-shadow 160ms ease, border-color 160ms ease;
+}
+.pagn-card:hover {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+.pagn-card.pagn-sel {
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.45), 0 14px 34px rgba(0, 0, 0, 0.55);
+}
+
+.pagn-edge {
+  animation: pagnEdgeIn 420ms ease backwards;
+}
+
+.pagn-viewport {
+  outline: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

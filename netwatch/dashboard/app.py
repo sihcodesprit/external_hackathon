@@ -58,6 +58,17 @@ _jobs_history_lock = threading.Lock()
 _model_test_jobs = {}
 _model_test_jobs_lock = threading.Lock()
 
+# ── Canonical analysis registry ───────────────────────────────────────────
+# Every completed analysis (from /api/analyze, scenarios, legacy /api/upload
+# OR a finished Model Test Center "Run All Modules" pass) is stored here under
+# ONE analysis_id. That id is the single source of truth for every screen:
+# Overview, Network Status, Forecast, Attack Graph, MITRE, Explainability and
+# Counterfactual all read the same persisted document.
+_analyses = {}
+_analyses_lock = threading.Lock()
+_active_analysis_id = None
+_active_analysis_lock = threading.Lock()
+
 # Lazy background prewarm so the first page request never blocks
 # behind the (heavy) pipeline load: assets and health answer instantly.
 _PREWARM_STARTED = False
@@ -183,6 +194,48 @@ def _update_job(job_id: str, **kwargs):
 def _get_job(job_id: str):
     with _jobs_lock:
         return _jobs.get(job_id)
+
+
+# ── Canonical analysis registry helpers ───────────────────────────────────
+def _get_active_analysis_id():
+    with _active_analysis_lock:
+        return _active_analysis_id
+
+
+def _set_active_analysis(analysis_id: str):
+    global _active_analysis_id
+    with _active_analysis_lock:
+        _active_analysis_id = analysis_id
+
+
+def _register_analysis(analysis_id, doc: dict, meta: dict) -> str | None:
+    """Persist a completed analysis document under one canonical id and make
+    it active. Every page reads from this registry, so re-uploading the same
+    capture is never required."""
+    if not doc:
+        return None
+    try:
+        doc["analysis_id"] = analysis_id
+        record = {
+            "analysis_id": analysis_id,
+            "doc": doc,
+            "created_at": (meta or {}).get("created_at") or datetime.now().isoformat(),
+            "filename": doc.get("filename") or (meta or {}).get("filename"),
+            "source": doc.get("source") or (meta or {}).get("source"),
+        }
+        with _analyses_lock:
+            _analyses[analysis_id] = record
+            # Keep at most a few hundred analyses in memory.
+            if len(_analyses) > 300:
+                for stale in list(_analyses.keys())[:50]:
+                    _analyses.pop(stale, None)
+        _set_active_analysis(analysis_id)
+        logger.info("Registered canonical analysis %s (active) from %s",
+                    analysis_id, record["filename"])
+        return analysis_id
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Could not register analysis %s: %s", analysis_id, e)
+        return None
 
 
 # ── Model Test Center job helpers ──────────────────────────────────────────
@@ -334,13 +387,59 @@ def _run_model_test_job(job_id: str):
             _model_test_update(job_id, progress=round((i + 1) / total * 100))
         job = _model_test_get(job_id)
         failures = sum(1 for m in (job or {}).get("modules", []) if m.get("status") == "failed")
-        _model_test_update(job_id, status="completed" if not failures else "partial_failed",
+        final_status = "completed" if not failures else "partial_failed"
+        # REGISTER THE CANONICAL ANALYSIS. Every page reads this document, so
+        # completing Run All Modules makes the analysis available everywhere
+        # without the user re-uploading the capture. Must happen before the job
+        # is marked terminal so the UI can adopt the analysis_id immediately.
+        try:
+            _publish_model_test_analysis(job_id)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Could not publish canonical analysis for model test job %s: %s",
+                             job_id, e)
+        _model_test_update(job_id, status=final_status,
                            progress=100, current_module=None,
                            finished_at=datetime.now().isoformat())
     except Exception as e:  # noqa: BLE001
         logger.exception("Model test job %s failed", job_id)
         _model_test_update(job_id, status="error", current_module=None,
                            error=str(e), finished_at=datetime.now().isoformat())
+
+
+def _publish_model_test_analysis(job_id: str):
+    """Build (or reuse) the canonical analysis doc for the current capture and
+    store it under the model-test job id, making it the active analysis."""
+    from netwatch.dashboard.analysis import build_document_from_pipeline
+    pipe = _pipeline_cache.get("default")
+    if pipe is None:
+        return None
+    records = getattr(pipe, "_last_records", None) or []
+    meta = _pipeline_cache.get("upload_meta", {})
+    if not records and not getattr(pipe, "states", None):
+        return None
+    job = _model_test_get(job_id) or {}
+    source = job.get("source", {}) or {}
+    filename = meta.get("filename") or source.get("filename") or "capture"
+    member = meta.get("member") or source.get("member")
+    source_label = meta.get("source") or source.get("source") or "User Uploaded PCAP"
+    occurrence = meta.get("occurrence")
+    doc = build_document_from_pipeline(
+        pipe, records,
+        filename=filename or "capture",
+        member=member,
+        source_label=source_label,
+        occurrence=occurrence or (source.get("occurrence") if isinstance(source, dict) else None),
+    )
+    if not doc or doc.get("status") != "ok":
+        return None
+    _pipeline_cache["active_model_test_doc"] = doc
+    _register_analysis(job_id, doc, meta={
+        "filename": filename,
+        "source": source_label,
+        "created_at": job.get("created_at") or datetime.now().isoformat(),
+    })
+    _model_test_update(job_id, analysis_id=job_id)
+    return job_id
 
 
 def _get_last_records():
@@ -452,8 +551,11 @@ def _run_analysis_job(job_id: str, tmp_path, filename: str, member: str | None,
             }
 
         _record_history(job_id, doc, meta=_get_job(job_id)["meta"])
+        # Persist the analysis under the canonical job id and make it active so
+        # every screen (Overview, Forecast, Graph, MITRE, ...) shares it.
+        _register_analysis(job_id, doc, meta=_get_job(job_id)["meta"])
         _update_job(job_id, status="done", stage="Analysis complete", progress=100,
-                    message="Results ready.", result=doc)
+                    message="Results ready.", result=doc, analysis_id=job_id)
     except Exception as e:  # noqa: BLE001
         logger.exception("Analysis job %s failed", job_id)
         _update_job(job_id, status="error", stage="Failed", message=str(e))
@@ -776,6 +878,26 @@ def create_app():
             return jsonify({"error": "Analysis job not found"}), 404
         return jsonify(job)
 
+    # ── Canonical analysis API ──────────────────────────────
+    # One analysis_id per completed analysis. Every screen fetches the SAME
+    # document via these endpoints, so no page requires re-uploading the capture.
+    @app.route("/api/analysis/active")
+    def api_analysis_active():
+        aid = _get_active_analysis_id()
+        with _analyses_lock:
+            record = _analyses.get(aid) if aid else None
+        if not record:
+            return jsonify({"analysis_id": None, "doc": None})
+        return jsonify({"analysis_id": aid, "doc": record["doc"]})
+
+    @app.route("/api/analysis/<analysis_id>")
+    def api_analysis_get(analysis_id):
+        with _analyses_lock:
+            record = _analyses.get(analysis_id)
+        if not record:
+            return jsonify({"error": f"Analysis `{analysis_id}` not found"}), 404
+        return jsonify(record["doc"])
+
     @app.route("/api/zip/inspect", methods=["POST"])
     def api_zip_inspect():
         file = request.files.get("file")
@@ -1071,12 +1193,18 @@ def _process_traffic_records(records: list, filename: str, member: str | None = 
             "n_states": doc.get("n_states", 0), "uploaded_at": datetime.now().isoformat(),
         }
 
-    _record_history(uuid.uuid4().hex[:12], doc, meta={
-        "filename": filename, "member": member, "source": "User Uploaded PCAP", "occurrence": None,
-        "created_at": datetime.now().isoformat()})
+    meta = {
+        "filename": filename, "member": member, "source": "User Uploaded PCAP",
+        "occurrence": None, "created_at": datetime.now().isoformat(),
+    }
+    # Persist the legacy upload as the canonical active analysis too, so every
+    # screen shares the same analysis_id regardless of how the capture flowed in.
+    legacy_analysis_id = uuid.uuid4().hex[:12]
+    _register_analysis(legacy_analysis_id, doc, meta=meta)
+    _record_history(legacy_analysis_id, doc, meta=meta)
 
     return {
-        "status": "ok", "type": "traffic_data",
+        "status": "ok", "type": "traffic_data", "analysis_id": legacy_analysis_id,
         "n_records": len(records), "n_states": doc.get("n_states", 0),
         "forecast": doc.get("forecast", {}), "graph": doc.get("graph", {}),
         "counterfactual": doc.get("counterfactual", {}),

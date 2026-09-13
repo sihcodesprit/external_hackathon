@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,27 +11,62 @@ import {
 import { api } from "../services/api";
 import type { AnalysisDoc, JobPoll } from "../types";
 
+export type AnalysisStatus = "loading" | "idle" | "ready" | "error";
+
 interface AnalysisState {
   doc: AnalysisDoc | null;
   job: JobPoll | null;
   running: boolean;
   analyzing: boolean;
   sourceLabel: string | null;
+  analysisId: string | null;
+  status: AnalysisStatus;
+  error: string | null;
+  /** Refetch the canonical active analysis from the backend (source of truth). */
+  refresh: () => Promise<void>;
+  /** Adopt a completed analysis (by id + document) as the active analysis. */
+  activateAnalysis: (analysisId: string, doc: AnalysisDoc) => void;
+  /** Adopt a just-completed analysis job (e.g. Model Test Center Run All). */
+  adoptCompletedJob: (jobId: string) => Promise<void>;
   startAnalysis: (file: File, member?: string) => Promise<void>;
   startScenario: (scenarioId: string) => Promise<void>;
   clear: () => void;
   setDoc: (doc: AnalysisDoc | null) => void;
 }
 
+const STORAGE_KEY = "netwatch_active_analysis_id";
 const Ctx = createContext<AnalysisState | null>(null);
 
+function persistActiveId(id: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (id) window.localStorage.setItem(STORAGE_KEY, id);
+    else window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* storage unavailable — backend remains the source of truth */
+  }
+}
+
+function readPersistedId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function AnalysisProvider({ children }: { children: ReactNode }) {
-  const [doc, setDoc] = useState<AnalysisDoc | null>(null);
+  const [doc, setDocRaw] = useState<AnalysisDoc | null>(null);
   const [job, setJob] = useState<JobPoll | null>(null);
   const [running, setRunning] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [sourceLabel, setSourceLabel] = useState<string | null>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const [status, setStatus] = useState<AnalysisStatus>("loading");
+  const [error, setError] = useState<string | null>(null);
   const pollTimer = useRef<number | undefined>(undefined);
+  const hydrated = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current) {
@@ -39,26 +75,44 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const activateAnalysis = useCallback((id: string, d: AnalysisDoc) => {
+    setDocRaw(d);
+    setAnalysisId(id);
+    persistActiveId(id);
+    setSourceLabel(d.member ?? d.filename);
+    setStatus("ready");
+    setError(null);
+  }, []);
+
   const clear = useCallback(() => {
     stopPolling();
-    setDoc(null);
+    setDocRaw(null);
     setJob(null);
     setRunning(false);
     setAnalyzing(false);
     setSourceLabel(null);
+    setAnalysisId(null);
+    persistActiveId(null);
+    setStatus("idle");
+    setError(null);
   }, [stopPolling]);
 
+  /** Persist a freshly completed analysis job (upload or scenario). */
   const startJob = useCallback(
     async (jobId: string, source: string) => {
       setRunning(true);
       setAnalyzing(true);
+      setError(null);
       setSourceLabel(source);
       const poll = async () => {
         try {
           const p = await api.pollJob(jobId);
           setJob(p);
           if (p.status === "done") {
-            if (p.result?.status === "ok") setDoc(p.result);
+            if (p.result?.status === "ok") {
+              const id = p.result.analysis_id ?? jobId;
+              activateAnalysis(id, p.result);
+            }
             setRunning(false);
             setAnalyzing(false);
             return;
@@ -66,6 +120,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           if (p.status === "error") {
             setRunning(false);
             setAnalyzing(false);
+            setError(p.error ?? "Analysis failed.");
             return;
           }
           pollTimer.current = window.setTimeout(poll, 750);
@@ -75,13 +130,13 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       };
       poll();
     },
-    [],
+    [activateAnalysis],
   );
 
   const startAnalysis = useCallback(
     async (file: File, member?: string) => {
       stopPolling();
-      setDoc(null);
+      setDocRaw(null);
       setJob(null);
       const { job_id } = await api.analyze(file, member);
       await startJob(job_id, member ?? file.name);
@@ -92,13 +147,91 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const startScenario = useCallback(
     async (scenarioId: string) => {
       stopPolling();
-      setDoc(null);
+      setDocRaw(null);
       setJob(null);
       const { job_id } = await api.runScenario(scenarioId);
       await startJob(job_id, `scenario:${scenarioId}`);
     },
     [startJob, stopPolling],
   );
+
+  const refresh = useCallback(async () => {
+    setStatus("loading");
+    try {
+      const active = await api.activeAnalysis();
+      if (active.analysis_id && active.doc) {
+        activateAnalysis(active.analysis_id, active.doc);
+      } else {
+        setDocRaw(null);
+        setAnalysisId(null);
+        persistActiveId(null);
+        setStatus("idle");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  }, [activateAnalysis]);
+
+  /** Adopt a completed job's canonical analysis (Model Test Center Run All). */
+  const adoptCompletedJob = useCallback(
+    async (jobId: string) => {
+      try {
+        const d = await api.analysis(jobId);
+        if (d?.status === "ok") {
+          activateAnalysis(d.analysis_id ?? jobId, d);
+          return;
+        }
+        await refresh();
+      } catch {
+        // The job id may not exist as an analysis yet — fall back to the
+        // backend's currently active analysis.
+        await refresh();
+      }
+    },
+    [activateAnalysis, refresh],
+  );
+
+  /** Restore the active analysis after navigation, refresh or direct URL load. */
+  const hydrate = useCallback(async () => {
+    setStatus("loading");
+    const saved = readPersistedId();
+    if (saved) {
+      try {
+        const d = await api.analysis(saved);
+        activateAnalysis(d.analysis_id ?? saved, d);
+        return;
+      } catch {
+        persistActiveId(null); // stale id — fall through to server active
+      }
+    }
+    try {
+      const active = await api.activeAnalysis();
+      if (active.analysis_id && active.doc) {
+        activateAnalysis(active.analysis_id, active.doc);
+      } else {
+        setStatus("idle");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  }, [activateAnalysis]);
+
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    void hydrate();
+  }, [hydrate]);
+
+  const setDoc = useCallback((d: AnalysisDoc | null) => {
+    setDocRaw(d);
+    if (!d) {
+      setAnalysisId(null);
+      persistActiveId(null);
+      setStatus("idle");
+    }
+  }, []);
 
   const value = useMemo<AnalysisState>(
     () => ({
@@ -107,12 +240,34 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       running,
       analyzing,
       sourceLabel,
+      analysisId,
+      status,
+      error,
+      refresh,
+      activateAnalysis,
+      adoptCompletedJob,
       startAnalysis,
       startScenario,
       clear,
       setDoc,
     }),
-    [doc, job, running, analyzing, sourceLabel, startAnalysis, startScenario, clear],
+    [
+      doc,
+      job,
+      running,
+      analyzing,
+      sourceLabel,
+      analysisId,
+      status,
+      error,
+      refresh,
+      activateAnalysis,
+      adoptCompletedJob,
+      startAnalysis,
+      startScenario,
+      clear,
+      setDoc,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -8,7 +8,7 @@ import { fmtClock } from "../../utils/format";
 
 export function TopBar() {
   const navigate = useNavigate();
-  const { job, running, doc, sourceLabel } = useAnalysis();
+  const { job, running, doc, sourceLabel, status, clear } = useAnalysis();
   const [uptime, setUptime] = useState(0);
   const [started, setStarted] = useState<string | null>(null);
 
@@ -37,6 +37,11 @@ export function TopBar() {
 
   const hhmmss = (v: number) =>
     `${String(Math.floor(v / 3600)).padStart(2, "0")}:${String(Math.floor((v % 3600) / 60)).padStart(2, "0")}:${String(v % 60).padStart(2, "0")}`;
+
+  const fmtCount = (v: number | null | undefined) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toLocaleString("en-US") : "—";
+  };
 
   return (
     <header
@@ -107,11 +112,29 @@ export function TopBar() {
             <Dot color={palette.good} />
             <span style={{ fontSize: 11.5, color: palette.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               Active analysis: <span className="mono">{sourceLabel ?? (doc.member ?? doc.filename)}</span> ·{" "}
-              {doc.n_states} states
+              {fmtCount(doc.n_records)} packets · {doc.n_states} states
             </span>
+            <button
+              onClick={clear}
+              title="Discard the active analysis (results stay on the server)"
+              style={{
+                background: "transparent",
+                border: `1px solid ${palette.borderSoft}`,
+                color: palette.textMuted,
+                fontSize: 10.5,
+                padding: "2px 8px",
+                borderRadius: 5,
+                cursor: "pointer",
+              }}
+            >
+              clear
+            </button>
           </div>
         )}
-        {!running && !doc && (
+        {!running && !doc && status === "loading" && (
+          <span style={{ fontSize: 11.5, color: palette.textMuted }}>Restoring analysis…</span>
+        )}
+        {!running && !doc && status !== "loading" && (
           <span style={{ fontSize: 11.5, color: palette.textMuted }}>
             Load a capture to start the analysis engine.
           </span>

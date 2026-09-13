@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { palette, stageColor } from "../styles/theme";
 import { api } from "../services/api";
+import { useAnalysis } from "../store/analysisContext";
 import type { ModelTestRunJob } from "../types";
 import { Card, Pill } from "../components/ui/primitives";
 import { ErrorState, PageLoader } from "../components/ui/displays";
@@ -16,6 +17,7 @@ const reduceMotion =
 
 export default function ModelTestRun() {
   const { jobId = "" } = useParams<{ jobId: string }>();
+  const adoptCompletedJob = useAnalysis().adoptCompletedJob;
   const [job, setJob] = useState<ModelTestRunJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -27,6 +29,7 @@ export default function ModelTestRun() {
   const clock = useRef<number | undefined>(undefined);
   const startedAt = useRef<string | null>(null);
   const justFinished = useRef<boolean>(false);
+  const adoptedJob = useRef<string | null>(null);
 
   const fetchJob = useCallback(async () => {
     try {
@@ -38,6 +41,16 @@ export default function ModelTestRun() {
       const terminal = ["completed", "partial_failed", "error", "failed"].includes(j.status);
       if (terminal) {
         if (!justFinished.current) justFinished.current = true;
+        if (
+          (j.status === "completed" || j.status === "partial_failed") &&
+          adoptedJob.current !== jobId
+        ) {
+          adoptedJob.current = jobId;
+          // Share this run's analysis with every other screen (Overview,
+          // Forecast, Attack Graph, MITRE, ...) so they stop showing
+          // "No analysis loaded".
+          void adoptCompletedJob(jobId);
+        }
         setError(null);
         return;
       }
@@ -52,7 +65,7 @@ export default function ModelTestRun() {
         timer.current = window.setTimeout(fetchJob, 2000);
       }
     }
-  }, [jobId]);
+  }, [jobId, adoptCompletedJob]);
 
   useEffect(() => {
     alive.current = true;

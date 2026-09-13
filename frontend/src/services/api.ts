@@ -1,4 +1,5 @@
 import type {
+  ActiveAnalysisInfo,
   AnalysisDoc,
   ForecastBlock,
   HistoryEntry,
@@ -61,6 +62,11 @@ export const api = {
   },
 
   pollJob: (jobId: string) => request<JobPoll>(`/api/analyze/${jobId}`),
+
+  analysis: (analysisId: string) =>
+    request<AnalysisDoc>(`/api/analysis/${encodeURIComponent(analysisId)}`),
+
+  activeAnalysis: () => request<ActiveAnalysisInfo>("/api/analysis/active"),
 
   inspectZip: (file: File) => {
     const fd = new FormData();
