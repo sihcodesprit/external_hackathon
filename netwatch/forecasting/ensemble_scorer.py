@@ -122,10 +122,6 @@ class EnsembleScorer:
                 self._lr_model.fit(X_scaled, y)
                 
                 self._ml_trained = True
-
-                # Save baselines
-                from netwatch.config import MODEL_DIR
-                self.save_baselines(str(MODEL_DIR / "ensemble_baselines.pkl"))
         except Exception as e:
             logger.warning(f"Could not train ML baselines for EnsembleScorer: {e}")
 

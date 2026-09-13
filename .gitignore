@@ -35,3 +35,8 @@ data/generated/
 data/models/*.pt
 data/models/*.pkl
 data/reports/
+
+# Model / dataset artifacts trained at runtime (never committed)
+data/data/models/*.pt
+data/data/models/*.pkl
+models/checkpoints/*.json

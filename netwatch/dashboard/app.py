@@ -99,11 +99,11 @@ def _build_pipeline_unlocked(force_retrain: bool = False) -> Pipeline:
     if cache_key in _pipeline_cache and not force_retrain:
         return _pipeline_cache[cache_key]
 
-    logger.info("Initializing pipeline (loading pre-trained models)...")
+    logger.info("Initializing pipeline (zero-data state; awaiting uploads)...")
     pipe = Pipeline()
-    pipe.load_pretrained()
+    # No bundled/pre-trained dataset: results are built from uploaded traffic
+    # only. `forecast_and_simulate` with no states returns a clean empty doc.
     pipe.forecast_and_simulate()
-    logger.info("Pipeline ready (zero-data state; awaiting user capture uploads).")
     _pipeline_cache[cache_key] = pipe
     return pipe
 
@@ -111,6 +111,36 @@ def _build_pipeline_unlocked(force_retrain: bool = False) -> Pipeline:
 def _build_pipeline(force_retrain: bool = False) -> Pipeline:
     with _pipeline_lock:
         return _build_pipeline_unlocked(force_retrain)
+
+
+# Pre-defined/bundled dataset artifacts are removed when the dashboard starts:
+# analysis is driven purely by the uploaded capture, never by a shipped dataset.
+_ARTIFACTS_CLEANED = False
+
+
+def _clean_predefined_artifacts() -> None:
+    global _ARTIFACTS_CLEANED
+    if _ARTIFACTS_CLEANED:
+        return
+    _ARTIFACTS_CLEANED = True
+    from netwatch.models.registry import CHECKPOINTS_DIR
+    from netwatch.config import MODEL_DIR
+    dirs = (MODEL_DIR, CHECKPOINTS_DIR)
+    bundled_names = (
+        "world_model_lstm.pt",      # shipped LSTM snapshot (now bundled no-op)
+        "feature_scaler.pkl",       # shipped scaler
+        "ensemble_baselines.pkl",   # shipped ensemble baselines
+        "test_dummy.pkl",           # shipped pytest fixture artifact
+        "registry.json",            # shipped checkpoint registry
+    )
+    for d in dirs:
+        try:
+            if d.exists():
+                for f in d.iterdir():
+                    if f.is_file() and f.name in bundled_names:
+                        f.unlink(missing_ok=True)
+        except OSError as e:  # noqa: BLE001
+            logger.warning(f"Could not clean model artifacts in {d}: {e}")
 
 
 def _allowed_file(filename: str) -> bool:
@@ -230,23 +260,20 @@ def _run_analysis_job(job_id: str, tmp_path, filename: str, member: str | None,
         from netwatch.dashboard.analysis import analyze_records
 
         with _pipeline_lock:
-            pipe = _pipeline_cache.get("default")
-
-        if pipe is None:
-            pipe = _build_pipeline()
-
-        with _pipeline_lock:
+            # A fresh pipeline is trained for every analysis so results come
+            # from THIS capture only — never a previous upload or bundled model.
+            fresh_pipe = Pipeline()
             doc = analyze_records(records, filename=filename, member=member,
                                   source_label=source, occurrence=occurrence,
                                   progress_fn=progress_fn,
-                                  pipeline_factory=lambda: pipe)
+                                  pipeline_factory=lambda: fresh_pipe)
             if not doc or doc.get("status") != "ok":
                 _update_job(job_id, status="error", stage="Failed",
                             message=doc.get("error", "Analysis failed.") if doc else "Analysis failed.")
                 return
 
-            pipe._last_records = records
-            _pipeline_cache["default"] = pipe
+            fresh_pipe._last_records = records
+            _pipeline_cache["default"] = fresh_pipe
             _pipeline_cache["upload_meta"] = {
                 "filename": filename,
                 "member": member,
@@ -338,6 +365,10 @@ def create_app():
     app.config["JSON_SORT_KEYS"] = False
     app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-production")
+
+    # Remove any bundled dataset/model artifacts shipped with previous builds
+    # so the dashboard only ever analyzes user-uploaded captures.
+    _clean_predefined_artifacts()
 
     @app.after_request
     def add_security_headers(response):
@@ -636,6 +667,17 @@ def create_app():
             k = 5
         actions = data.get("actions") or None
         pipe = _build_pipeline()
+        if not pipe or pipe.trainer is None or not pipe.states:
+            return jsonify({
+                "status": "no_history",
+                "results": {},
+                "recommendation": {
+                    "recommended_action": "no_action",
+                    "recommended_label": "No Action Required (Monitor)",
+                    "reason": "Upload a PCAP or run a scenario to load network data first.",
+                    "risk_reduction_pct_points": 0.0,
+                },
+            })
         from netwatch.counterfactual.simulator import CounterfactualEngine
         history = pipe.states[-10:]
         engine = CounterfactualEngine(pipe.trainer.model,

@@ -6,10 +6,22 @@ import type { TrafficMember, ZipInspect } from "../../types";
 import { fmtBytes } from "../../utils/format";
 import { Button } from "../ui/Button";
 
+const KIND_LABEL: Record<string, string> = {
+  pcap: "PCAP",
+  pcapng: "PCAPNG",
+  csv: "CSV",
+  jsonl: "JSONL",
+};
+
+function splitMember(name: string): { folder: string; file: string } {
+  const idx = name.lastIndexOf("/");
+  if (idx < 0) return { folder: "", file: name };
+  return { folder: name.slice(0, idx + 1), file: name.slice(idx + 1) };
+}
+
 export function FileUploader() {
   const { startAnalysis, running } = useAnalysis();
   const [zipInfo, setZipInfo] = useState<ZipInspect | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -20,8 +32,6 @@ export function FileUploader() {
       const info = await api.inspectZip(f);
       setZipInfo(info);
       setFile(f);
-      const first = info.traffic_members[0];
-      if (first) setSelected(first.name);
     } catch {
       setZipInfo(null);
     } finally {
@@ -36,7 +46,6 @@ export function FileUploader() {
       } else {
         setFile(f);
         setZipInfo(null);
-        setSelected(null);
       }
     },
     [handleScanZip],
@@ -60,13 +69,15 @@ export function FileUploader() {
   const onDragLeave = useCallback(() => setDragActive(false), []);
 
   const start = useCallback(() => {
-    if (!file) return;
-    if (zipInfo && selected) {
-      startAnalysis(file, selected);
-    } else {
-      startAnalysis(file);
-    }
-  }, [file, zipInfo, selected, startAnalysis]);
+    if (file) startAnalysis(file);
+  }, [file, startAnalysis]);
+
+  const runMember = useCallback(
+    (m: TrafficMember) => {
+      if (file) startAnalysis(file, m.name);
+    },
+    [file, startAnalysis],
+  );
 
   const uploadLocal = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,8 +142,8 @@ export function FileUploader() {
             Browse files
           </span>
         </label>
-        {file && !running && (
-          <Button variant="ghost" onClick={() => { setFile(null); setZipInfo(null); setSelected(null); }}>
+        {file && !zipInfo && !running && (
+          <Button variant="ghost" onClick={() => { setFile(null); setZipInfo(null); }}>
             Clear
           </Button>
         )}
@@ -143,7 +154,7 @@ export function FileUploader() {
           <span style={{ fontSize: 12, color: palette.textDim }}>Scanning ZIP archive…</span>
         </div>
       )}
-      {zipInfo && zipInfo.traffic_members.length > 1 && (
+      {zipInfo && zipInfo.traffic_members.length > 0 && (
         <div
           style={{
             marginTop: 20,
@@ -155,50 +166,72 @@ export function FileUploader() {
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 600, color: palette.text, marginBottom: 10 }}>
-            {zipInfo.traffic_members.length} captures found in archive — select one to analyze
+            {zipInfo.traffic_members.length} capture{zipInfo.traffic_members.length === 1 ? "" : "s"} found in archive — click one to analyze
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto" }}>
-            {zipInfo.traffic_members.map((m: TrafficMember) => (
-              <label
-                key={m.name}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "8px 10px",
-                  borderRadius: 7,
-                  border: `1px solid ${selected === m.name ? palette.accentBorder : palette.borderSoft}`,
-                  background: selected === m.name ? palette.accentSoft : "transparent",
-                  cursor: "pointer",
-                  fontSize: 12.5,
-                }}
-              >
-                <input
-                  type="radio"
-                  name="pcap"
-                  checked={selected === m.name}
-                  onChange={() => setSelected(m.name)}
-                  style={{ accentColor: palette.accent }}
-                />
-                <span style={{ flex: 1, color: palette.text, fontFamily: "ui-monospace, monospace" }}>
-                  {m.name}
-                </span>
-                <span style={{ fontSize: 11, color: palette.textMuted }}>{fmtBytes(m.size_bytes)}</span>
-              </label>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+            {zipInfo.traffic_members.map((m: TrafficMember) => {
+              const { folder, file: fname } = splitMember(m.name);
+              return (
+                <div
+                  key={m.name}
+                  onClick={() => runMember(m)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") runMember(m); }}
+                  title={`Run ${m.name}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 12px",
+                    borderRadius: 8,
+                    border: `1px solid ${palette.borderSoft}`,
+                    background: "rgba(15,23,42,0.5)",
+                    cursor: running ? "default" : "pointer",
+                    fontSize: 12.5,
+                    opacity: running ? 0.6 : 1,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 9.5,
+                      fontWeight: 700,
+                      letterSpacing: 0.6,
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      background: "rgba(34,211,238,0.12)",
+                      color: palette.accent,
+                      border: `1px solid ${palette.accentBorder}`,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {KIND_LABEL[m.kind] ?? m.kind.toUpperCase()}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, monospace", color: palette.text }}>
+                    {folder && <span style={{ color: palette.textDim }}>{folder}</span>}
+                    <span style={{ color: palette.text, fontWeight: 600 }}>{fname}</span>
+                  </span>
+                  <span style={{ fontSize: 11, color: palette.textMuted, whiteSpace: "nowrap" }}>
+                    {fmtBytes(m.size_bytes)}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#e7f7ff",
+                      background: "linear-gradient(135deg, #164e63, #0f766e)",
+                      padding: "5px 12px",
+                      borderRadius: 7,
+                      border: "1px solid rgba(34,211,238,0.4)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Run
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          {selected && (
-            <div style={{ marginTop: 14 }}>
-              <Button
-                onClick={start}
-                disabled={running || !selected}
-                loading={scanning}
-                variant="primary"
-              >
-                Analyze selected capture
-              </Button>
-            </div>
-          )}
         </div>
       )}
       {file && !zipInfo && !running && (

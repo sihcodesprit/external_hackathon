@@ -259,7 +259,15 @@ def analyze_records(records: List[Any], filename: str, member: Optional[str] = N
     if not states:
         return {"error": "Traffic was parsed, but not enough temporal windows could be formed to build network states."}
 
-    tick("World Model forecast", 38, "Rolling out LSTM world model predictions.")
+    # Train the world model + scaler entirely on THIS capture (in-memory,
+    # persist=False → no dataset/model files are written to disk).
+    tick("World Model training", 32, "Training world model on this capture.")
+    try:
+        train_info = pipe.train(persist=False, model_type="linear")
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"Could not train the world model on this capture: {e}"}
+
+    tick("World Model forecast", 44, "Rolling out world model K-step predictions.")
     sim_out = pipe.forecast_and_simulate(k=5)
     forecast = sim_out["forecast"]
     graph = sim_out["graph"]

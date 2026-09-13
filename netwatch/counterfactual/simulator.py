@@ -143,9 +143,10 @@ class CounterfactualEngine:
                 "reason": "No counterfactual results to compare — keeping natural traffic flow.",
             }
 
-        no_action = results.get("no_action", {})
-        baseline = no_action.get("peak_risk",
-                                 simulation.get("baseline_current_risk", 0.0))
+        no_action = results.get("no_action")
+        baseline = (no_action.get("peak_risk")
+                    if no_action
+                    else simulation.get("baseline_current_risk", 0.0))
 
         best_action_id = None
         best_risk = float("inf")
@@ -159,7 +160,10 @@ class CounterfactualEngine:
 
         if best_action_id != "no_action" and risk_reduction <= 0:
             best_action_id = "no_action"
-            best = results["no_action"]
+            if no_action is not None:
+                best = results["no_action"]
+            else:
+                best = {"label": "No Action (Monitor)", "peak_risk": baseline}
             risk_reduction = 0.0
 
         reason = (

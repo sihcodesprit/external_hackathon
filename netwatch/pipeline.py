@@ -290,7 +290,15 @@ class Pipeline:
             return False
 
     # ── II. train ──────────────────────────────────────────
-    def train(self) -> Dict:
+    def train(self, persist: bool = True,
+              model_type: Optional[str] = None) -> Dict:
+        """Train the World Model on the CURRENTLY LOADED states.
+
+        persist=False keeps everything in memory (no model/scaler/registry files
+        written) — used by the dashboard so analysis is driven purely by the
+        uploaded traffic, not by any bundled dataset.  The LSTM checkpoint path
+        remains available for CLI/historical training.
+        """
         if not hasattr(self, "states") or not self.states:
             raise RuntimeError("load_data() must be called before train()")
 
@@ -299,15 +307,28 @@ class Pipeline:
 
         X_train, Y_train = build_sequences(train_states, self.normalizer)
         X_val, Y_val = build_sequences(val_states, self.normalizer)
+        if X_train.shape[0] == 0 and len(self.states) > 10:
+            # Too few states survive the split — train on all of them instead.
+            # The trainer performs its own internal train/val split during fit.
+            train_states = sorted(self.states, key=lambda s: s.timestamp)
+            X_train, Y_train = build_sequences(train_states, self.normalizer)
+            X_val, Y_val = X_train[:1], Y_train[:1]
         if X_train.shape[0] == 0:
-            raise RuntimeError("Not enough states to build training sequences")
+            raise RuntimeError(
+                "Not enough states to build training sequences "
+                f"(need > 10 time windows; got {len(self.states)}). "
+                "Upload a longer capture or a ZIP with more packets.")
 
         from netwatch.features.sequences import build_seq_labels
         bin_train = build_seq_labels(train_states)
         bin_val = build_seq_labels(val_states)
+        if len(bin_train) != X_train.shape[0]:
+            bin_train = bin_train[:X_train.shape[0]]
+        if len(bin_val) != X_val.shape[0]:
+            bin_val = bin_val[:X_val.shape[0]]
 
         self.trainer = WorldModelTrainer(
-            model_type=WORLD_MODEL_TYPE, n_features=N_FEATURES)
+            model_type=model_type or WORLD_MODEL_TYPE, n_features=N_FEATURES)
 
         metrics = self.trainer.fit(X_train, Y_train, val_fraction=0.15,
                                    batch_size=32, epochs=30)
@@ -330,20 +351,20 @@ class Pipeline:
         self._X_val, self._Y_val = X_val, Y_val
         self._bin_train, self._bin_val = bin_train, bin_val
 
-        self.normalizer.save(SCALER_PATH)
-        self.trainer.save(str(WORLD_MODEL_PATH))
-
-        # Register model in registry
-        self.model_registry.register(
-            name="lstm_world_model",
-            version="2.0",
-            checkpoint_path=str(WORLD_MODEL_PATH),
-            dataset=self.dataset,
-            feature_count=N_FEATURES,
-            sequence_length=10,
-            metrics={"train_loss": metrics.get("final_train_loss"),
-                     "val_loss": metrics.get("final_val_loss")},
-        )
+        # No files are written when persist=False (dashboard-driven, in-memory).
+        if persist:
+            self.normalizer.save(SCALER_PATH)
+            self.trainer.save(str(WORLD_MODEL_PATH))
+            self.model_registry.register(
+                name="world_model",
+                version="2.0",
+                checkpoint_path=str(WORLD_MODEL_PATH),
+                dataset=self.dataset,
+                feature_count=N_FEATURES,
+                sequence_length=10,
+                metrics={"train_loss": metrics.get("final_train_loss"),
+                         "val_loss": metrics.get("final_val_loss")},
+            )
 
         return {
             "training": metrics,
