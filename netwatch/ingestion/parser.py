@@ -134,7 +134,7 @@ def load_packets_jsonl(path: Path) -> List[PacketRecord]:
     return records
 
 
-def load_pcap(path: Path) -> List[PacketRecord]:
+def load_pcap(path: Path, display_name: str | None = None) -> List[PacketRecord]:
     """Load a PCAP file using scapy (optional dependency)."""
     try:
         from scapy.all import rdpcap  # type: ignore
@@ -143,8 +143,18 @@ def load_pcap(path: Path) -> List[PacketRecord]:
         logger.error("scapy not installed — cannot ingest PCAP. Install with: pip install scapy")
         return []
 
+    fname = display_name or Path(path).name
+    try:
+        pkts = rdpcap(str(path))
+    except Exception as e:
+        raise ValueError(
+            f"Could not read the capture file '{fname}': {e}. "
+            "Make sure it is a valid .pcap or .pcapng file."
+        ) from e
+    if not pkts:
+        raise ValueError(f"The capture file '{fname}' contains no packets.")
+
     records: List[PacketRecord] = []
-    pkts = rdpcap(str(path))
     for pkt in pkts:
         if not pkt.haslayer(IP):
             continue
@@ -170,6 +180,13 @@ def load_pcap(path: Path) -> List[PacketRecord]:
             rec.payload_size = len(udp.payload)
         rec.bytes_sent = len(pkt)
         records.append(rec)
+
+    if not records:
+        raise ValueError(
+            f"Read {len(pkts)} packets from '{fname}' but none had an IP layer "
+            "(only ARP / non-IP link-layer traffic was present). Upload a capture "
+            "that contains IPv4/IPv6 traffic, or a flow CSV / JSONL export instead."
+        )
     logger.info(f"Loaded {len(records)} packets from PCAP {path}")
     return records
 
@@ -188,10 +205,10 @@ def load_flow_csv(path: Path) -> List[PacketRecord]:
     return records
 
 
-def ingest(path: Path, kind: str = "auto") -> List[PacketRecord]:
+def ingest(path: Path, kind: str = "auto", display_name: str | None = None) -> List[PacketRecord]:
     """Dispatch to the right loader based on file kind."""
     if kind == "pcap" or (kind == "auto" and str(path).lower().endswith((".pcap", ".pcapng"))):
-        return load_pcap(path)
+        return load_pcap(path, display_name=display_name)
     if kind == "csv" or (kind == "auto" and str(path).lower().endswith(".csv")):
         return load_flow_csv(path)
     return load_packets_jsonl(path)

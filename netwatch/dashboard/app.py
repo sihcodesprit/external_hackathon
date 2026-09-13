@@ -239,10 +239,10 @@ def _run_analysis_job(job_id: str, tmp_path, filename: str, member: str | None,
                 raise ValueError("No supported traffic file (.pcap, .pcapng, .csv, .jsonl) found in ZIP.")
             _update_job(job_id, stage="PCAP discovered", progress=14,
                         message=f"Analyzing {chosen}")
-            records = ingest(extracted, kind=_kind_for(Path(chosen).suffix))
+            records = ingest(extracted, kind=_kind_for(Path(chosen).suffix), display_name=chosen)
             member = chosen
         elif tmp:
-            records = ingest(tmp, kind=file_type)
+            records = ingest(tmp, kind=file_type, display_name=filename)
         else:
             raise ValueError("No file provided.")
 
