@@ -16,7 +16,7 @@ pyyaml>=6.0
 shap>=0.46
 
 # ── PCAP ingestion ────────────────────────────────────────
-# scapy>=2.5   # uncomment to enable PCAP ingestion
+scapy>=2.5   # enables upload of .pcap / .pcapng captures
 
 # ── Testing ────────────────────────────────────────────────
 pytest>=7.4

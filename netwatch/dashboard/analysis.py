@@ -104,9 +104,16 @@ def _safe(v: Any, default: float = 0.0) -> float:
 
 
 def _parse_ts(ts_str: str):
+    if isinstance(ts_str, datetime):
+        return ts_str
+    s = str(ts_str).strip().replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
-    except Exception:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        pass
+    try:
+        return datetime.fromtimestamp(float(s))
+    except (ValueError, OverflowError, OSError):
         return None
 
 

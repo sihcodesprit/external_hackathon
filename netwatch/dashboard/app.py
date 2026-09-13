@@ -247,6 +247,17 @@ def _run_analysis_job(job_id: str, tmp_path, filename: str, member: str | None,
             raise ValueError("No file provided.")
 
         if not records:
+            pcap_kind = file_type in ("pcap", "pcapng") or (
+                tmp and tmp.suffix.lower() in (".pcap", ".pcapng")) or (
+                extracted and extracted.suffix.lower() in (".pcap", ".pcapng"))
+            if pcap_kind:
+                try:
+                    import scapy  # noqa: F401
+                except ImportError:
+                    raise ValueError(
+                        "PCAP parsing is disabled: the 'scapy' package is not installed "
+                        "in this environment. Install it ('pip install scapy') or upload a "
+                        "CSV / JSONL flow export instead.")
             raise ValueError("No valid packet or flow records found in the uploaded file.")
 
         # ── Run the analysis document build ─────────────────────
