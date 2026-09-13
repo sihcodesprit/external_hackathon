@@ -204,9 +204,10 @@ class StateBuilder:
     MIN_WINDOW_SECONDS = 1.0
     MIN_WINDOW_STEP = 1.0
     MIN_WINDOWS_DESIRED = 5
-    # Packet-bucket fallback: yields ~14 states for any group with >= 11 packets,
-    # comfortably above the training threshold (SEQUENCE_LENGTH + 1 = 11).
-    PACKET_BUCKET_MIN_PACKETS = 11
+    # Packet-bucket fallback: any group with at least a few packets yields a
+    # trainable state sequence even when timestamps are all identical (the
+    # training sequence length adapts down to fit the capture size).
+    PACKET_BUCKET_MIN_PACKETS = 3
     PACKET_BUCKET_TARGET = 14
 
     def __init__(self, 

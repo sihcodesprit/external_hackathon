@@ -31,6 +31,7 @@ from netwatch.config import (
     N_FEATURES,
     REPORTS_DIR,
     SCALER_PATH,
+    SEQUENCE_LENGTH,
     WORLD_MODEL_PATH,
     WORLD_MODEL_TYPE,
     ensure_dirs,
@@ -305,23 +306,32 @@ class Pipeline:
         train_states, val_states = temporal_split(self.states, val_fraction=0.2)
         self.normalizer.fit(self.states)
 
-        X_train, Y_train = build_sequences(train_states, self.normalizer)
-        X_val, Y_val = build_sequences(val_states, self.normalizer)
-        if X_train.shape[0] == 0 and len(self.states) > 10:
+        # SHORT-CAPTURE SUPPORT: pick the largest sequence length this capture
+        # can actually produce (>= 1 sequence from >= 2 states). Tiny or
+        # degenerate-timestamp PCAPs/CSVs then train instead of hard-failing
+        # on the default 10-step window.
+        effective_seq = min(SEQUENCE_LENGTH, max(1, len(self.states) - 1))
+
+        X_train, Y_train = build_sequences(train_states, self.normalizer,
+                                           sequence_length=effective_seq)
+        X_val, Y_val = build_sequences(val_states, self.normalizer,
+                                       sequence_length=effective_seq)
+        if X_train.shape[0] == 0:
             # Too few states survive the split — train on all of them instead.
             # The trainer performs its own internal train/val split during fit.
             train_states = sorted(self.states, key=lambda s: s.timestamp)
-            X_train, Y_train = build_sequences(train_states, self.normalizer)
+            X_train, Y_train = build_sequences(train_states, self.normalizer,
+                                               sequence_length=effective_seq)
             X_val, Y_val = X_train[:1], Y_train[:1]
         if X_train.shape[0] == 0:
             raise RuntimeError(
                 "Not enough states to build training sequences "
-                f"(need > 10 time windows; got {len(self.states)}). "
-                "Upload a longer capture or a ZIP with more packets.")
+                f"(need at least 2 time windows; got {len(self.states)}). "
+                "Upload a capture with more packets or flow records.")
 
         from netwatch.features.sequences import build_seq_labels
-        bin_train = build_seq_labels(train_states)
-        bin_val = build_seq_labels(val_states)
+        bin_train = build_seq_labels(train_states, sequence_length=effective_seq)
+        bin_val = build_seq_labels(val_states, sequence_length=effective_seq)
         if len(bin_train) != X_train.shape[0]:
             bin_train = bin_train[:X_train.shape[0]]
         if len(bin_val) != X_val.shape[0]:
