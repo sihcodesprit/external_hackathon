@@ -9,6 +9,7 @@ features are normalized during dataset construction; NetworkState itself carries
 raw (unnormalized) values plus the timestamp.
 """
 
+import math
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -203,6 +204,10 @@ class StateBuilder:
     MIN_WINDOW_SECONDS = 1.0
     MIN_WINDOW_STEP = 1.0
     MIN_WINDOWS_DESIRED = 5
+    # Packet-bucket fallback: yields ~14 states for any group with >= 11 packets,
+    # comfortably above the training threshold (SEQUENCE_LENGTH + 1 = 11).
+    PACKET_BUCKET_MIN_PACKETS = 11
+    PACKET_BUCKET_TARGET = 14
 
     def __init__(self, 
                  window_seconds: int = WINDOW_SECONDS,
@@ -265,7 +270,7 @@ class StateBuilder:
             groups = {("", ""): records}
 
         states: List[NetworkState] = []
-        
+
         # Reset temporal state for new build
         self._entropy_history = []
         self._handshake_history = []
@@ -284,106 +289,185 @@ class StateBuilder:
                 continue
             timed.sort(key=lambda x: x[0])
 
-            first = timed[0][0]
-            last = timed[-1][0]
-            total_duration = (last - first).total_seconds()
-
-            # Adaptive window sizing for short captures
-            ws, step = self._adapt_window(total_duration, len(timed))
-
-            win_start = first
-            i = 0
-            n = len(timed)
-            
             # Convert to dicts once per group
             pkt_dicts = _packet_records_to_dicts([p for _, p in timed])
 
-            while win_start <= last:
-                win_end = win_start + timedelta(seconds=ws)
-                while i < n and timed[i][0] < win_end:
-                    i += 1
-                j = i
-                while j > 0 and timed[j - 1][0] >= win_start:
-                    j -= 1
-                
-                window_pkts = [timed[k][1] for k in range(j, i)]
-                window_dicts = pkt_dicts[j:i]
-                
-                if window_pkts:
-                    # Compute base features
-                    feats = compute_base_features(window_pkts, actual_window_seconds=ws)
-                    
-                    # Advanced features
-                    if self.enable_advanced_features:
-                        # Entropy features with temporal derivatives
-                        entropy_feats = compute_entropy_features(
-                            window_dicts,
-                            self._entropy_history[-1] if self._entropy_history else None,
-                            self._entropy_history[-2] if len(self._entropy_history) >= 2 else None
-                        )
-                        feats.update(entropy_feats)
-                        self._entropy_history.append(entropy_feats)
-                        
-                        # TCP handshake features
-                        handshake_feats = compute_tcp_handshake_features(
-                            window_dicts,
-                            self._handshake_history[-1] if self._handshake_history else None
-                        )
-                        feats.update(handshake_feats)
-                        self._handshake_history.append(handshake_feats)
-                        
-                        # Temporal/jitter features
-                        temporal_feats = compute_temporal_features(window_dicts)
-                        feats.update(temporal_feats)
-                        
-                        # Graph features
-                        graph_feats, self._graph_state = compute_graph_features(
-                            window_dicts, self._graph_state
-                        )
-                        feats.update(graph_feats)
-                        
-                        # Initialize trackers on first window
-                        if self._trajectory_tracker is None:
-                            self._trajectory_tracker = TrajectoryTracker()
-                        if self._baseline_tracker is None:
-                            self._baseline_tracker = BaselineTracker()
-                        
-                        # Trajectory features
-                        trajectory_feats, self._trajectory_tracker = compute_trajectory_features(
-                            feats, self._trajectory_tracker
-                        )
-                        feats.update(trajectory_feats)
-                        
-                        # Baseline deviation features
-                        is_benign = not any(p.label == 1 for p in window_pkts)
-                        baseline_feats, self._baseline_tracker = compute_baseline_features(
-                            feats, self._baseline_tracker, is_benign=is_benign
-                        )
-                        feats.update(baseline_feats)
+            group_states = self._build_time_window_states(timed, pkt_dicts, src, dst)
 
-                    # Derive ground-truth label/stage (majority vote per window so
-                    # mixed captures produce both attack and benign windows)
-                    attack_count = sum(1 for p in window_pkts if p.label == 1)
-                    label = 1 if attack_count * 2 >= len(window_pkts) else 0
-                    stage = ""
-                    if label:
-                        stage = max(
-                            [p.stage for p in window_pkts if p.label == 1 and p.stage],
-                            default="",
-                        )
+            # Degenerate-timestamp fallback: a capture whose packets all share
+            # the same second (or look instantaneous) collapses the time-window
+            # slide into 1-2 windows, which can never form a training sequence.
+            # Split the group into contiguous packet buckets with synthetic
+            # 1-second spacing so ANY sufficiently large capture still yields a
+            # trainable state sequence instead of failing with "not enough
+            # windows" downstream.
+            if (
+                len(group_states) < self.MIN_WINDOWS_DESIRED
+                and len(timed) >= self.PACKET_BUCKET_MIN_PACKETS
+            ):
+                group_states = self._build_packet_bucket_states(
+                    timed, pkt_dicts, src, dst
+                )
 
-                    states.append(NetworkState(
-                        timestamp=win_start.isoformat().replace("+00:00", "Z"),
-                        features=feats,
-                        src_ip=src,
-                        dst_ip=dst,
-                        label=label,
-                        stage=stage or None,
-                    ))
-                win_start += timedelta(seconds=step)
+            states.extend(group_states)
 
         states.sort(key=lambda s: s.timestamp)
         return states
+
+    def _build_time_window_states(
+        self,
+        timed: List[tuple],
+        pkt_dicts: List[Dict],
+        src: str,
+        dst: str,
+    ) -> List[NetworkState]:
+        """Slide a time window (with adaptive sizing for short captures)."""
+        first = timed[0][0]
+        last = timed[-1][0]
+        total_duration = (last - first).total_seconds()
+
+        ws, step = self._adapt_window(total_duration, len(timed))
+
+        out: List[NetworkState] = []
+        win_start = first
+        i = 0
+        n = len(timed)
+
+        while win_start <= last:
+            win_end = win_start + timedelta(seconds=ws)
+            while i < n and timed[i][0] < win_end:
+                i += 1
+            j = i
+            while j > 0 and timed[j - 1][0] >= win_start:
+                j -= 1
+
+            window_pkts = [timed[k][1] for k in range(j, i)]
+            window_dicts = pkt_dicts[j:i]
+
+            st = self._build_state(window_pkts, window_dicts, win_start, src, dst, ws)
+            if st:
+                out.append(st)
+
+            win_start += timedelta(seconds=step)
+
+        return out
+
+    def _build_packet_bucket_states(
+        self,
+        timed: List[tuple],
+        pkt_dicts: List[Dict],
+        src: str,
+        dst: str,
+    ) -> List[NetworkState]:
+        """Fallback for degenerate timestamps: contiguous packet buckets with
+        synthetic 1-second spacing, sized to yield ~PACKET_BUCKET_TARGET states."""
+        n = len(timed)
+        bucket_size = max(1, math.ceil(n / self.PACKET_BUCKET_TARGET))
+        first = timed[0][0]
+
+        out: List[NetworkState] = []
+        idx = 0
+        bucket_index = 0
+        while idx < n:
+            chunk = timed[idx: idx + bucket_size]
+            if chunk:
+                win_start = first + timedelta(seconds=bucket_index)
+                st = self._build_state(
+                    [r for _, r in chunk],
+                    pkt_dicts[idx: idx + bucket_size],
+                    win_start,
+                    src,
+                    dst,
+                    1.0,
+                )
+                if st:
+                    out.append(st)
+            idx += bucket_size
+            bucket_index += 1
+
+        return out
+
+    def _build_state(
+        self,
+        window_pkts: List[PacketRecord],
+        window_dicts: List[Dict],
+        win_start: datetime,
+        src: str,
+        dst: str,
+        window_seconds: float,
+    ) -> Optional[NetworkState]:
+        """Compute the full feature vector and ground-truth for one window."""
+        if not window_pkts:
+            return None
+
+        feats = compute_base_features(window_pkts, actual_window_seconds=window_seconds)
+
+        if self.enable_advanced_features:
+            # Entropy features with temporal derivatives
+            entropy_feats = compute_entropy_features(
+                window_dicts,
+                self._entropy_history[-1] if self._entropy_history else None,
+                self._entropy_history[-2] if len(self._entropy_history) >= 2 else None
+            )
+            feats.update(entropy_feats)
+            self._entropy_history.append(entropy_feats)
+
+            # TCP handshake features
+            handshake_feats = compute_tcp_handshake_features(
+                window_dicts,
+                self._handshake_history[-1] if self._handshake_history else None
+            )
+            feats.update(handshake_feats)
+            self._handshake_history.append(handshake_feats)
+
+            # Temporal/jitter features
+            temporal_feats = compute_temporal_features(window_dicts)
+            feats.update(temporal_feats)
+
+            # Graph features
+            graph_feats, self._graph_state = compute_graph_features(
+                window_dicts, self._graph_state
+            )
+            feats.update(graph_feats)
+
+            # Initialize trackers on first window
+            if self._trajectory_tracker is None:
+                self._trajectory_tracker = TrajectoryTracker()
+            if self._baseline_tracker is None:
+                self._baseline_tracker = BaselineTracker()
+
+            # Trajectory features
+            trajectory_feats, self._trajectory_tracker = compute_trajectory_features(
+                feats, self._trajectory_tracker
+            )
+            feats.update(trajectory_feats)
+
+            # Baseline deviation features
+            is_benign = not any(p.label == 1 for p in window_pkts)
+            baseline_feats, self._baseline_tracker = compute_baseline_features(
+                feats, self._baseline_tracker, is_benign=is_benign
+            )
+            feats.update(baseline_feats)
+
+        # Derive ground-truth label/stage (majority vote per window so
+        # mixed captures produce both attack and benign windows)
+        attack_count = sum(1 for p in window_pkts if p.label == 1)
+        label = 1 if attack_count * 2 >= len(window_pkts) else 0
+        stage = ""
+        if label:
+            stage = max(
+                [p.stage for p in window_pkts if p.label == 1 and p.stage],
+                default="",
+            )
+
+        return NetworkState(
+            timestamp=win_start.isoformat().replace("+00:00", "Z"),
+            features=feats,
+            src_ip=src,
+            dst_ip=dst,
+            label=label,
+            stage=stage or None,
+        )
 
 
 def compute_window_features(pkts: List[PacketRecord], actual_window_seconds: float = None) -> Dict[str, float]:

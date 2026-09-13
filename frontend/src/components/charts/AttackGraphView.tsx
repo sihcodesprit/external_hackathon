@@ -2,20 +2,24 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { palette, stageColor } from "../../styles/theme";
 import type { PredictGraph, PredictGraphEdge, PredictGraphNode } from "../../types";
 
-const CARD_W = 176;
-const CARD_H = 98;
-const COL_GAP = 216;
-const V_GAP = 30;
-const PAD_L = 48;
-const PAD_T = 52;
-const PAD_R = 48;
-const PAD_B = 48;
-const MIN_H = 340;
+/* ── Geometry ───────────────────────────────────────────────────────────
+ * Cards are 210×124 with a permanent ≥132px horizontal corridor between
+ * them. The corridor is where edges, arrows and their compact labels live,
+ * so nothing edge-related can physically overlap a node card. */
+const CARD_W = 210;
+const CARD_H = 124;
+const COL_GAP = CARD_W + 132; // node-centre spacing → ~132px free between cards
+const V_GAP = 36;
+const PAD_L = 84;
+const PAD_T = 72;
+const PAD_R = 84;
+const PAD_B = 72;
+const MIN_H = 380;
 
-const reduceMotion =
-  typeof window !== "undefined" &&
-  !!window.matchMedia &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/* Zoom clamps: never shrink so far that card text becomes unreadable —
+ * if the graph is wider than the viewport, the viewport scrolls instead. */
+const MIN_SCALE = 0.55;
+const MAX_SCALE = 1.6;
 
 function num(v: unknown, d = 0): number {
   const n = typeof v === "number" ? v : Number(v);
@@ -26,9 +30,9 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
-/** Convert a backend risk/confidence value to a 0-100 percentage. The backend
- * emits fractions (0..1); older payloads may emit 0..100. Values ≤ 1 (and > 0)
- * are treated as a fraction so percentages are never inflated to 10000%. */
+/** Backend risks/confidences are fractions (0..1); some payloads emit 0..100.
+ * Values > 0 and <= 1 are treated as fractions so percentages are never
+ * inflated to 10000%. */
 function toPct(v: unknown): number {
   const n = num(v);
   const pct = n > 0 && n <= 1 ? n * 100 : n;
@@ -39,6 +43,10 @@ function pctStr(v: unknown): string {
   return `${Math.round(toPct(v))}%`;
 }
 
+function finitePt(v: number | undefined | null): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
 type PosNode = PredictGraphNode & { x: number; y: number };
 
 interface LayoutEdge {
@@ -46,6 +54,7 @@ interface LayoutEdge {
   edge: PredictGraphEdge;
   source: PosNode;
   target: PosNode;
+  lane: number; // perpendicular spacing for parallel edges
 }
 
 interface LayoutModel {
@@ -59,9 +68,15 @@ interface LayoutModel {
   maxRisk: number;
 }
 
-/** Deterministic horizontal timeline: group nodes by forecast step, one column
- * per step, ordered left→right from NOW (t0) through t+k. Columns with multiple
- * nodes stack vertically so nothing zigzags or overlaps. */
+interface Rect2D {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/* ── Deterministic layout ─────────────────────────────────────────────── */
+
 function buildTimelineColumns(nodes: PredictGraphNode[]): PredictGraphNode[][] {
   const byStep = new Map<number, PredictGraphNode[]>();
   for (const n of nodes) {
@@ -74,8 +89,6 @@ function buildTimelineColumns(nodes: PredictGraphNode[]): PredictGraphNode[][] {
   return keys.map((k) => byStep.get(k) ?? []);
 }
 
-/** Deterministic stage-chain ordering: topological order (Kahn) with stable
- * tie-breaking, falling back to original order for disconnected/cyclic nodes. */
 function orderStageNodes(nodes: PredictGraphNode[], edges: PredictGraphEdge[]): PredictGraphNode[] {
   const indeg = new Map<string, number>();
   const adj = new Map<string, string[]>();
@@ -122,17 +135,48 @@ function sortCol(col: PredictGraphNode[]): PredictGraphNode[] {
   );
 }
 
-function bezier(path: { source: PosNode; target: PosNode }): {
-  d: string;
-  mid: { x: number; y: number };
-} {
-  const a = { x: path.source.x + CARD_W / 2, y: path.source.y };
-  const b = { x: path.target.x - CARD_W / 2, y: path.target.y };
-  const dx = clamp(Math.abs(b.x - a.x) * 0.5, 40, 170);
+/* Edge geometry: connects right-centre of source → left-centre of target,
+ * arrow marker terminates exactly at the target card boundary. y-bend is
+ * added per lane so parallel edges fan out instead of stacking on one line. */
+function bezier(le: LayoutEdge): { d: string; mid: { x: number; y: number }; slope: number } {
+  const a = { x: le.source.x + CARD_W / 2, y: le.source.y + le.lane * 22 };
+  const b = { x: le.target.x - CARD_W / 2, y: le.target.y + le.lane * 22 };
+  const dx = clamp(Math.abs(b.x - a.x) * 0.5, 50, 150);
   const d = `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
   const mx = (a.x + 3 * (a.x + dx) + 3 * (b.x - dx) + b.x) / 8;
   const my = (a.y + 3 * a.y + 3 * b.y + b.y) / 8;
-  return { d, mid: { x: mx, y: my } };
+  const slope = b.y !== a.y ? Math.atan2(b.y - a.y, b.x - a.x) : 0;
+  return { d, mid: { x: mx, y: my }, slope };
+}
+
+/* Label collision avoidance: propose candidate anchor points (always OUTSIDE
+ * and above/below the edge corridor, clear of the source/target card bodies)
+ * and return the first one whose pill box does not intersect any node card. */
+function pickLabelPos(
+  base: { x: number; y: number },
+  w: number,
+  h: number,
+  rects: Rect2D[],
+): { x: number; y: number } {
+  const candidates = [
+    { x: base.x, y: base.y - 24 },
+    { x: base.x, y: base.y - 44 },
+    { x: base.x, y: base.y + 22 },
+    { x: base.x, y: base.y + 42 },
+    { x: base.x - 46, y: base.y - 24 },
+    { x: base.x + 46, y: base.y - 24 },
+    { x: base.x - 80, y: base.y },
+    { x: base.x + 80, y: base.y },
+  ];
+  const hits = (p: { x: number; y: number }) =>
+    rects.some(
+      (r) =>
+        p.x + w / 2 > r.x0 - 6 &&
+        p.x - w / 2 < r.x1 + 6 &&
+        p.y + h / 2 > r.y0 - 6 &&
+        p.y - h / 2 < r.y1 + 6,
+    );
+  return candidates.find((c) => !hits(c)) ?? { x: base.x, y: base.y - 44 };
 }
 
 export function AttackGraphView({
@@ -147,21 +191,36 @@ export function AttackGraphView({
   fixedMode?: "timeline" | "stages";
 }) {
   const [mode, setMode] = useState<"timeline" | "stages">(fixedMode ?? "timeline");
-  const [selected, setSelected] = useState<PredictGraphNode | null>(null);
+  const [selectedNode, setSelectedNode] = useState<PredictGraphNode | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<LayoutEdge | null>(null);
   const [view, setView] = useState<{ s: number; x: number; y: number }>({ s: 1, x: 0, y: 0 });
   const [box, setBox] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  const [dragging, setDragging] = useState(false);
+  const [laySig, setLaySig] = useState(0);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = useRef(view);
+  const boxRef = useRef(box);
+  const modelRef = useRef<LayoutModel | null>(null);
   const touched = useRef(false);
-  const drag = useRef<{ startX: number; startY: number; vx: number; vy: number } | null>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  useEffect(() => {
+    boxRef.current = box;
+  }, [box]);
 
   const activeMode: "timeline" | "stages" = fixedMode ?? mode;
 
   const model = useMemo<LayoutModel | null>(() => {
     if (!graph) return null;
     const timelineNodes = (graph.nodes ?? []).filter(
-      (n) => n && typeof n.id === "string" && typeof n.label === "string",
+      (n) =>
+        n &&
+        typeof n.id === "string" &&
+        typeof n.label === "string" &&
+        finitePt(n.risk) &&
+        Number.isFinite(finitePt(n.confidence) ? n.confidence : 0),
     );
     const timelineEdges = (graph.edges ?? []).filter(
       (e) => e && typeof e.source === "string" && typeof e.target === "string",
@@ -192,7 +251,7 @@ export function AttackGraphView({
     const maxInCol = Math.max(...cols.map((c) => c.length), 1);
     const H = Math.max(MIN_H, PAD_T + PAD_B + maxInCol * CARD_H + (maxInCol - 1) * V_GAP);
     const W = PAD_L + (colCount - 1) * COL_GAP + CARD_W + PAD_R;
-    const centerY = H / 2;
+    const centerY = PAD_T + ((maxInCol - 1) * (CARD_H + V_GAP)) / 2 + CARD_H / 2;
 
     const pos = new Map<string, PosNode>();
     cols.forEach((col, ci) => {
@@ -204,22 +263,34 @@ export function AttackGraphView({
       });
     });
 
+    // Parallel edges (same source AND target) get a lane so they fan out.
+    const pairCount = new Map<string, number>();
+    for (const e of usedEdges) {
+      if (pos.has(e.source) && pos.has(e.target)) {
+        const k = e.source === e.target ? e.source : `${e.source}\u0000${e.target}`;
+        pairCount.set(k, (pairCount.get(k) ?? 0) + 1);
+      }
+    }
+    const seen = new Map<string, number>();
     const edges: LayoutEdge[] = usedEdges
       .map((e) => ({ edge: e, source: pos.get(e.source), target: pos.get(e.target) }))
       .filter(
         (x): x is { edge: PredictGraphEdge; source: PosNode; target: PosNode } =>
           !!x.source && !!x.target,
       )
-      .map(({ edge, source, target }, i) => ({
-        key: edge.id ?? `${edge.source}->${edge.target}#${i}`,
-        edge,
-        source,
-        target,
-      }))
-      .sort((a, b) => a.source.x - b.source.x || a.target.x - b.target.x);
+      .map(({ edge, source, target }) => {
+        const k = source.id === target.id ? source.id : `${source.id}\u0000${target.id}`;
+        const idx = seen.get(k) ?? 0;
+        seen.set(k, idx + 1);
+        const total = pairCount.get(k) ?? 1;
+        const lane = total > 1 ? idx - (total - 1) / 2 : 0;
+        return { key: edge.id ?? `${edge.source}->${edge.target}#${idx}`, edge, source, target, lane };
+      })
+      .sort((a, b) => a.source.x - b.source.x || a.lane - b.lane || a.target.x - b.target.x);
 
     const counts = graph.counts ?? {};
     const nodes = [...pos.values()];
+    const maxRisk = Math.max(0, ...nodes.map((p) => num(p.risk)));
     return {
       W,
       H,
@@ -228,18 +299,27 @@ export function AttackGraphView({
       forecastSteps: num(counts.forecast_steps, Math.max(0, timelineNodes.length - 1)),
       stages: num(counts.stages, cols.length),
       transitions: num(counts.transitions, edges.filter((e) => e.edge.transition).length),
-      maxRisk: Math.max(0, ...nodes.map((p) => num(p.risk))),
+      maxRisk: Number.isFinite(maxRisk) ? maxRisk : 0,
     };
   }, [graph, activeMode]);
 
-  const fitView = useCallback(
-    (w: number, h: number, m: LayoutModel | null) => {
-      if (!m || w <= 0 || h <= 0) return null;
-      const s = clamp(Math.min((w - 24) / m.W, (h - 24) / m.H), 0.15, 1.5);
-      return { s, x: (w - m.W * s) / 2, y: (h - m.H * s) / 2 };
-    },
-    [],
-  );
+  useEffect(() => {
+    modelRef.current = model;
+  }, [model]);
+
+  /* Recompute fit whenever data/mode changes; user zoom (touched) is preserved
+   * across viewport resizes. */
+  const fitView = useCallback((m: LayoutModel | null, w: number, h: number) => {
+    if (!m || w <= 0 || h <= 0) return null;
+    const s = clamp(Math.min((w - 28) / m.W, (h - 28) / m.H), MIN_SCALE, MAX_SCALE);
+    const x = (w - m.W * s) / 2;
+    const y = (h - m.H * s) / 2;
+    return {
+      s,
+      x: m.W * s > w ? 0 : Math.max(0, x),
+      y: m.H * s > h ? 0 : Math.max(0, y),
+    };
+  }, []);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -247,70 +327,57 @@ export function AttackGraphView({
     const ro = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
       if (!rect) return;
+      boxRef.current = { w: rect.width, h: rect.height };
       setBox({ w: rect.width, h: rect.height });
+      if (!touched.current) {
+        const f = fitView(modelRef.current, rect.width, rect.height);
+        if (f) setView(f);
+      }
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [fitView]);
 
-  // New graph or mode → reset interaction state and refit.
-  useEffect(() => {
-    touched.current = false;
-    setSelected(null);
-    setView({ s: 1, x: 0, y: 0 });
-  }, [graph, activeMode]);
-
-  // Auto-fit whenever the layout or container box changes (until the user pans/zooms).
-  useEffect(() => {
-    if (!model || touched.current) return;
-    const f = fitView(box.w, box.h, model);
-    if (f) setView(f);
-  }, [model, box, fitView]);
-
-  const zoomAt = (factor: number) => {
+  const zoomAt = useCallback((factor: number) => {
     touched.current = true;
-    setView((v) => {
-      const cx = box.w / 2;
-      const cy = box.h / 2;
-      const wx = (cx - v.x) / v.s;
-      const wy = (cy - v.y) / v.s;
-      const ns = clamp(v.s * factor, 0.2, 3.5);
+    const b = boxRef.current;
+    setView((cur) => {
+      const cx = b.w / 2;
+      const cy = b.h / 2;
+      const wx = (cx - cur.x) / cur.s;
+      const wy = (cy - cur.y) / cur.s;
+      const ns = clamp(cur.s * factor, MIN_SCALE, MAX_SCALE);
       return { s: ns, x: cx - wx * ns, y: cy - wy * ns };
     });
-  };
+  }, []);
 
-  const doFit = () => {
-    touched.current = true;
-    const f = fitView(box.w, box.h, model);
-    if (f) setView(f);
-  };
-
-  const doReset = () => {
+  const doFit = useCallback(() => {
     touched.current = false;
-    const f = fitView(box.w, box.h, model);
+    const f = fitView(modelRef.current, boxRef.current.w, boxRef.current.h);
     if (f) setView(f);
-  };
+  }, [fitView]);
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    drag.current = { startX: e.clientX, startY: e.clientY, vx: view.x, vy: view.y };
-    setDragging(true);
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    touched.current = true;
-    setView((v) => ({
-      ...v,
-      x: drag.current!.vx + (e.clientX - drag.current!.startX),
-      y: drag.current!.vy + (e.clientY - drag.current!.startY),
-    }));
-  };
-  const onPointerUp = () => {
-    if (drag.current) {
-      drag.current = null;
-      setDragging(false);
-    }
-  };
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      zoomAt(e.deltaY < 0 ? 1.12 : 0.89);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomAt]);
+
+  // New graph or mode → reset selection and re-run the one-shot layout animation.
+  useEffect(() => {
+    touched.current = false;
+    setSelectedNode(null);
+    setSelectedEdge(null);
+    setLaySig((k) => k + 1);
+    const f = fitView(modelRef.current, boxRef.current.w, boxRef.current.h);
+    if (f) setView(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph, activeMode]);
 
   if (loading) {
     return (
@@ -322,7 +389,7 @@ export function AttackGraphView({
     );
   }
 
-  if (!model) {
+  if (!model || model.nodes.length === 0) {
     return (
       <div style={{ padding: "26px 16px", display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
         <span style={{ fontSize: 13, fontWeight: 650, color: palette.text }}>No predictive attack path available</span>
@@ -340,6 +407,14 @@ export function AttackGraphView({
     !!graph?.unknown_stage || model.nodes.some((p) => String(p.stage).toLowerCase() === "unknown");
   const boxHeight = typeof height === "number" && height > 0 ? `${height}px` : "clamp(500px, 62vh, 760px)";
   const minBoxHeight = typeof height === "number" && height > 0 ? undefined : 500;
+
+  // Node bounding boxes (used for edge-label collision avoidance).
+  const rects: Rect2D[] = model.nodes.map((p) => ({
+    x0: p.x - CARD_W / 2,
+    y0: p.y - CARD_H / 2,
+    x1: p.x + CARD_W / 2,
+    y1: p.y + CARD_H / 2,
+  }));
 
   const chip = (label: string, value: string | number, color?: string) => (
     <div
@@ -374,6 +449,16 @@ export function AttackGraphView({
           {chip("stage" + (model.stages === 1 ? "" : "s"), model.stages)}
           {chip("transition" + (model.transitions === 1 ? "" : "s"), model.transitions)}
           {chip("max risk", pctStr(model.maxRisk), palette.danger)}
+          <div
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "4px 10px", borderRadius: 999, border: `1px solid ${palette.border}`,
+              background: "rgba(16,24,42,0.6)", fontSize: 11, color: palette.textDim,
+            }}
+          >
+            <span style={{ width: 14, height: 0, borderTop: `2px solid ${palette.accent}`, display: "inline-block" }} />
+            <span>predicted transition</span>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {!fixedMode && (
@@ -401,7 +486,7 @@ export function AttackGraphView({
             </span>
             <button type="button" aria-label="Zoom in" style={zoomBtnStyle} onClick={() => zoomAt(1.22)}>+</button>
             <button type="button" aria-label="Fit graph to view" style={zoomBtnStyle} onClick={doFit}>Fit</button>
-            <button type="button" aria-label="Reset zoom" style={zoomBtnStyle} onClick={doReset}>Reset</button>
+            <button type="button" aria-label="Reset view" style={zoomBtnStyle} onClick={doFit}>Reset</button>
           </div>
         </div>
       </div>
@@ -410,221 +495,255 @@ export function AttackGraphView({
         <div
           ref={wrapRef}
           className="pagn-viewport"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onClick={() => setSelected(null)}
+          onClick={() => {
+            setSelectedNode(null);
+            setSelectedEdge(null);
+          }}
           style={{
             flex: "1 1 460px",
             minWidth: 0,
             height: boxHeight,
             minHeight: minBoxHeight,
             position: "relative",
-            overflow: "hidden",
+            overflow: "auto",
             background: "rgba(10,15,30,0.4)",
             borderRadius: 10,
             border: `1px solid ${palette.borderSoft}`,
-            cursor: dragging ? "grabbing" : "grab",
-            userSelect: "none",
-            touchAction: "none",
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              top: 0,
-              transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
-              transformOrigin: "0 0",
-              width: model.W,
-              height: model.H,
-            }}
-          >
-            <svg
-              width={model.W}
-              height={model.H}
-              style={{ position: "absolute", left: 0, top: 0, overflow: "visible", display: "block" }}
+          <div style={{ width: model.W * view.s, height: model.H * view.s }}>
+            <div
+              key={laySig}
+              className="pagn-layer"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
+                transformOrigin: "0 0",
+                width: model.W,
+                height: model.H,
+              }}
             >
-              <defs>
-                <marker
-                  id={`pagn-arrow-${uid}`}
-                  viewBox="0 0 10 10"
-                  refX="9"
-                  refY="5"
-                  markerWidth="6.5"
-                  markerHeight="6.5"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill={palette.accent} />
-                </marker>
-              </defs>
-              {model.edges.map((le) => {
-                const { d } = bezier(le);
-                const weight = clamp(num(le.edge.weight), 0, 1);
-                const w = 1.5 + weight * 2.5;
-                const isPredicted = le.edge.transition || String(le.edge.label).includes("predicted");
-                return (
-                  <path
-                    key={le.key}
-                    className="pagn-edge"
-                    d={d}
-                    fill="none"
-                    stroke={isPredicted ? "#22d3ee" : palette.textMuted}
-                    strokeWidth={w}
-                    strokeOpacity={0.45}
-                    markerEnd={`url(#pagn-arrow-${uid})`}
-                  />
-                );
-              })}
-            </svg>
-
-            {model.edges.map((le) => {
-              const { mid } = bezier(le);
-              const labelRaw = String(le.edge.label ?? "transition");
-              const label = labelRaw.length > 18 ? `${labelRaw.slice(0, 18)}…` : labelRaw;
-              return (
-                <div
-                  key={le.key}
-                  style={{
-                    position: "absolute",
-                    left: mid.x,
-                    top: mid.y - 12,
-                    transform: "translate(-50%,-50%)",
-                    background: "rgba(13,20,37,0.96)",
-                    border: `1px solid ${palette.borderSoft}`,
-                    borderRadius: 999,
-                    padding: "2px 8px",
-                    fontSize: 9.5,
-                    color: palette.textMuted,
-                    whiteSpace: "nowrap",
-                    maxWidth: 170,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    pointerEvents: "none",
-                    zIndex: 1,
-                  }}
-                >
-                  {label} · conf {pctStr(le.edge.weight)}
-                </div>
-              );
-            })}
-
-            {model.nodes.map((p, i) => {
-              const color = p.type === "current" ? palette.accent : stageColor(p.stage);
-              const stepLabel = num(p.step, 0);
-              const riskPct = toPct(p.risk);
-              const confPct = toPct(num(p.confidence, p.probability));
-              const evidenceCount = Array.isArray(p.evidence) ? p.evidence.filter(Boolean).length : 0;
-              const isSel = selected?.id === p.id;
-              return (
-                <div
-                  key={p.id}
-                  className={isSel ? "pagn-card pagn-sel" : "pagn-card"}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelected(p);
-                  }}
-                  title={`${p.label}\nRisk ${pctStr(p.risk)} · Confidence ${pctStr(num(p.confidence, p.probability))}`}
-                  style={{
-                    position: "absolute",
-                    left: p.x - CARD_W / 2,
-                    top: p.y - CARD_H / 2,
-                    width: CARD_W,
-                    height: CARD_H,
-                    boxSizing: "border-box",
-                    background: "rgba(10,15,30,0.92)",
-                    border: `1px solid ${color}66`,
-                    borderLeft: `3px solid ${color}`,
-                    borderRadius: 10,
-                    padding: "9px 11px",
-                    cursor: "pointer",
-                    animationDelay: reduceMotion ? "0ms" : `${i * 55}ms`,
-                    zIndex: 2,
-                    boxShadow: isSel
-                      ? `0 0 0 1px ${color}66, 0 12px 30px rgba(0,0,0,0.5)`
-                      : "0 6px 18px rgba(0,0,0,0.35)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span
-                      style={{
-                        fontSize: 9, fontWeight: 700, letterSpacing: 0.6,
-                        color, background: `${color}1f`, border: `1px solid ${color}44`,
-                        borderRadius: 5, padding: "1px 6px",
+              {/* LAYER 2 — edges + arrow markers (painted below labels/nodes) */}
+              <svg
+                width={model.W}
+                height={model.H}
+                style={{ position: "absolute", left: 0, top: 0, overflow: "visible", display: "block" }}
+              >
+                <defs>
+                  <marker
+                    id={`pagn-arrow-${uid}`}
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill={palette.accent} />
+                  </marker>
+                </defs>
+                {model.edges.map((le) => {
+                  const { d } = bezier(le);
+                  const weight = clamp(num(le.edge.weight), 0, 1);
+                  const w = 1.5 + weight * 2.5;
+                  const isPredicted = le.edge.transition || String(le.edge.label).includes("predicted");
+                  const isSel = selectedEdge?.key === le.key;
+                  return (
+                    <path
+                      key={le.key}
+                      className="pagn-edge"
+                      d={d}
+                      fill="none"
+                      stroke={isPredicted ? palette.accent : palette.textMuted}
+                      strokeWidth={isSel ? w + 2 : w}
+                      strokeOpacity={isSel ? 0.95 : 0.45}
+                      markerEnd={`url(#pagn-arrow-${uid})`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedEdge(le);
+                        setSelectedNode(null);
                       }}
-                    >
-                      {p.type === "current" || stepLabel === 0 ? "NOW" : `t+${stepLabel}`}
-                    </span>
-                    <span style={{ marginLeft: "auto", fontSize: 10, color: palette.textMuted }}>
-                      {evidenceCount > 0 ? `${evidenceCount} ev` : ""}
-                    </span>
-                  </div>
+                    />
+                  );
+                })}
+              </svg>
+
+              {/* LAYER 3 — edge labels (compact pills, always avoided away from nodes) */}
+              {model.edges.map((le) => {
+                const geo = bezier(le);
+                const label = `${Math.round(toPct(le.edge.weight))}%`;
+                const estW = clamp(34 + label.length * 7, 64, 130);
+                const pos = pickLabelPos(geo.mid, estW, 22, rects);
+                const isSel = selectedEdge?.key === le.key;
+                return (
                   <div
+                    key={`${le.key}-label`}
+                    className={isSel ? "pagn-edge-label pagn-sel" : "pagn-edge-label"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedEdge(le);
+                      setSelectedNode(null);
+                    }}
+                    title={`${le.source.label} → ${le.target.label} · ${le.edge.label ?? "transition"} · confidence ${pctStr(le.edge.weight)}`}
                     style={{
-                      marginTop: 6,
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      lineHeight: 1.22,
-                      color: "#dbe4ff",
-                      maxHeight: 32,
-                      overflow: "hidden",
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
+                      position: "absolute",
+                      left: pos.x,
+                      top: pos.y,
+                      transform: "translate(-50%,-50%)",
+                      background: "rgba(13,20,37,0.97)",
+                      border: `1px solid ${isSel ? palette.accent : palette.border}`,
+                      borderRadius: 999,
+                      padding: "2px 9px",
+                      fontSize: 10.5,
+                      fontWeight: 650,
+                      color: isSel ? palette.accent : palette.textDim,
+                      whiteSpace: "nowrap",
+                      pointerEvents: "auto",
+                      cursor: "pointer",
+                      zIndex: 1,
                     }}
                   >
-                    {p.label}
+                    {label}
                   </div>
-                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ flex: 1, height: 4, borderRadius: 99, background: palette.border, overflow: "hidden" }}>
-                      <div
+                );
+              })}
+
+              {/* LAYERS 4–6 — node cards (opaque, sit above edges and labels) */}
+              {model.nodes.map((p) => {
+                const color = p.type === "current" ? palette.accent : stageColor(p.stage);
+                const stepLabel = Math.round(num(p.step, 0));
+                const riskPct = toPct(p.risk);
+                const confPct = toPct(num(p.confidence, p.probability));
+                const evidenceCount = Array.isArray(p.evidence) ? p.evidence.filter(Boolean).length : 0;
+                const isSel = selectedNode?.id === p.id;
+                return (
+                  <div
+                    key={p.id}
+                    className={isSel ? "pagn-card pagn-sel" : "pagn-card"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedNode(p);
+                      setSelectedEdge(null);
+                    }}
+                    title={`${p.label}\nRisk ${pctStr(p.risk)} · Confidence ${pctStr(num(p.confidence, p.probability))}`}
+                    style={{
+                      position: "absolute",
+                      left: p.x - CARD_W / 2,
+                      top: p.y - CARD_H / 2,
+                      width: CARD_W,
+                      height: CARD_H,
+                      boxSizing: "border-box",
+                      display: "flex",
+                      flexDirection: "column",
+                      background: "rgba(10,15,30,0.95)",
+                      border: `1px solid ${color}66`,
+                      borderLeft: `3px solid ${color}`,
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      cursor: "pointer",
+                      zIndex: isSel ? 4 : 2,
+                      boxShadow: isSel
+                        ? `0 0 0 1px ${color}66, 0 14px 34px rgba(0,0,0,0.55)`
+                        : "0 6px 18px rgba(0,0,0,0.35)",
+                    }}
+                  >
+                    {/* Step badge */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
                         style={{
-                          height: "100%",
-                          width: `${riskPct}%`,
-                          borderRadius: 99,
-                          background: riskPct >= 75 ? palette.danger : riskPct >= 50 ? palette.warn : palette.good,
-                          transition: reduceMotion ? "none" : "width 400ms ease",
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: 0.6,
+                          color,
+                          background: `${color}1f`,
+                          border: `1px solid ${color}44`,
+                          borderRadius: 5,
+                          padding: "1px 7px",
+                          whiteSpace: "nowrap",
                         }}
-                      />
+                      >
+                        {p.type === "current" || stepLabel === 0 ? "NOW" : `t+${stepLabel}`}
+                      </span>
+                      <span style={{ marginLeft: "auto", fontSize: 10, color: palette.textMuted }}>
+                        {evidenceCount > 0 ? `${evidenceCount} ev` : ""}
+                      </span>
                     </div>
-                    <span className="mono" style={{ fontSize: 10, color: palette.textDim }}>
-                      {Math.round(riskPct)}%
-                    </span>
+
+                    {/* Stage name — wraps instead of clipping */}
+                    <div
+                      style={{
+                        marginTop: 7,
+                        fontSize: 13.5,
+                        fontWeight: 700,
+                        lineHeight: 1.25,
+                        color: "#dbe4ff",
+                        overflowWrap: "anywhere",
+                        whiteSpace: "normal",
+                        wordBreak: "normal",
+                      }}
+                    >
+                      {p.label}
+                    </div>
+
+                    {/* Risk row */}
+                    <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 7 }}>
+                      <span style={{ fontSize: 10, color: palette.textMuted, width: 26 }}>Risk</span>
+                      <div style={{ flex: 1, height: 5, borderRadius: 99, background: palette.border, overflow: "hidden" }}>
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${riskPct}%`,
+                            borderRadius: 99,
+                            background: riskPct >= 75 ? palette.danger : riskPct >= 50 ? palette.warn : palette.good,
+                          }}
+                        />
+                      </div>
+                      <span className="mono" style={{ fontSize: 10, color: palette.textDim, width: 32, textAlign: "right" }}>
+                        {Math.round(riskPct)}%
+                      </span>
+                    </div>
+
+                    {/* Footer */}
+                    <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", fontSize: 10, color: palette.textMuted }}>
+                      <span>Conf {Math.round(confPct)}%</span>
+                      <span>Sev {num(p.severity, 0).toFixed(1)}</span>
+                    </div>
                   </div>
-                  <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", fontSize: 10, color: palette.textMuted }}>
-                    <span>conf {Math.round(confPct)}%</span>
-                    <span>sev {num(p.severity, 0).toFixed(1)}</span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           <div
             className="mono"
             style={{
-              position: "absolute",
+              position: "sticky",
               left: 8,
               bottom: 8,
+              width: "max-content",
               fontSize: 10,
               color: palette.textMuted,
-              background: "rgba(13,20,37,0.7)",
+              background: "rgba(13,20,37,0.78)",
               border: `1px solid ${palette.borderSoft}`,
               borderRadius: 6,
-              padding: "2px 7px",
+              padding: "2px 8px",
               pointerEvents: "none",
             }}
           >
-            drag to pan · wheel disabled · zoom {Math.round(view.s * 100)}%
+            scroll to pan · wheel to zoom · {Math.round(view.s * 100)}%
           </div>
         </div>
 
-        {model.nodes.length === 1 && model.nodes[0].type === "current" && model.forecastSteps === 0 ? (
+        {model.nodes.length === 1 && model.nodes[0].type === "current" && model.forecastSteps === 0 && !selectedNode ? (
           <div style={{ flex: "0 1 240px", minWidth: 220, padding: 12, borderRadius: 10, border: `1px solid ${palette.borderSoft}`, fontSize: 11.5, color: palette.textDim, lineHeight: 1.6 }}>
             No K-step forecast produced yet. The graph will populate once the world model rollout completes.
           </div>
-        ) : selected ? (
-          <NodeDetailPanel node={selected} />
+        ) : selectedNode && !selectedEdge ? (
+          <NodeDetailPanel node={selectedNode} />
+        ) : selectedEdge ? (
+          <EdgeDetailPanel edge={selectedEdge} />
         ) : null}
       </div>
 
@@ -677,11 +796,40 @@ function NodeDetailPanel({ node }: { node: PredictGraphNode }) {
   );
 }
 
+function EdgeDetailPanel({ edge }: { edge: LayoutEdge }) {
+  const isPredicted = edge.edge.transition || String(edge.edge.label).includes("predicted");
+  const color = isPredicted ? palette.accent : palette.textMuted;
+  return (
+    <div
+      style={{
+        flex: "0 1 240px", minWidth: 220, padding: 14, borderRadius: 10,
+        border: `1px solid ${color}55`, background: "rgba(10,15,30,0.6)",
+      }}
+    >
+      <div style={{ fontSize: 12.5, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+        Transition
+      </div>
+      <DetailRow label="From" value={edge.source.label} />
+      <DetailRow label="To" value={edge.target.label} />
+      <DetailRow label="Type" value={String(edge.edge.label ?? "transition")} />
+      <DetailRow label="Confidence" value={pctStr(edge.edge.weight)} />
+      {edge.target.step !== undefined && (
+        <DetailRow label="Forecast step" value={edge.target.step === 0 ? "current state" : `t+${edge.target.step}`} />
+      )}
+      <div style={{ marginTop: 10, fontSize: 11, color: palette.textMuted, lineHeight: 1.55 }}>
+        {isPredicted
+          ? "The world-model rollout predicts this stage transition based on the current network state."
+          : "Observed stage transition from the analyzed traffic windows."}
+      </div>
+    </div>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "3px 0", fontSize: 11.5 }}>
       <span style={{ color: palette.textDim }}>{label}</span>
-      <span className="mono" style={{ color: palette.text, fontWeight: 600 }}>{value}</span>
+      <span className="mono" style={{ color: palette.text, fontWeight: 600, textAlign: "right" }}>{value}</span>
     </div>
   );
 }

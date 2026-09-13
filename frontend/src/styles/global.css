@@ -120,28 +120,27 @@ kbd {
   animation: spin 800ms linear infinite;
 }
 
-@keyframes pagnPop {
+@keyframes pagnSettle {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.94);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
-@keyframes pagnEdgeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+/* Predictive attack graph layer model (single stacking context inside the
+ * scaled layer div):
+ *   1. background (viewport fill)
+ *   2. edges (SVG paths + arrow markers)
+ *   3. edge labels (compact pills, z-index 1)
+ *   4. node cards (z-index 2; selected card promoted to 4)
+ * Nodes always paint above edges/labels. Nothing edge-related sits above a card. */
+.pagn-layer {
+  animation: pagnSettle 420ms ease backwards;
 }
 
 .pagn-card {
-  animation: pagnPop 380ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
   transition: box-shadow 160ms ease, border-color 160ms ease;
 }
 .pagn-card:hover {
@@ -152,7 +151,21 @@ kbd {
 }
 
 .pagn-edge {
-  animation: pagnEdgeIn 420ms ease backwards;
+  transition: stroke-opacity 160ms ease;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.pagn-edge-label {
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+.pagn-edge-label:hover {
+  border-color: rgba(34, 211, 238, 0.55);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.25);
+}
+.pagn-edge-label.pagn-sel {
+  border-color: rgba(34, 211, 238, 0.8);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.5), 0 0 14px rgba(34, 211, 238, 0.3);
 }
 
 .pagn-viewport {
