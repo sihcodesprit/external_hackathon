@@ -185,13 +185,32 @@ class Pipeline:
 
         Supports both PyTorch LSTM snapshots (state_dict payload) and the JSON
         linear-model format (W matrix payload). Returns None if neither matches.
+
+        The JSON format is tried FIRST because it loads with NumPy only — the
+        torch import (~5s cold) is deferred until a real torch snapshot is used.
         """
+        # Try JSON linear-world-model format first (NumPy-only, no torch import).
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict) and d.get("W"):
+                n_feat = int(d.get("n_features", self.n_features))
+                if isinstance(d["W"], list) and d["W"]:
+                    n_feat = len(d["W"])
+                from netwatch.models.linear_world_model import LinearWorldModel
+                model = LinearWorldModel(n_features=n_feat)
+                trainer = WorldModelTrainer(model=model, model_type="linear", n_features=n_feat)
+                if trainer.load(str(path)):
+                    logger.info(f"Detected JSON linear-world-model checkpoint ({n_feat} features)")
+                    return trainer
+        except Exception as e:
+            logger.debug(f"Not a JSON linear checkpoint: {e}")
+
+        # Try PyTorch / LSTM (imports torch lazily, only for real snapshots)
         try:
             import torch
         except Exception:
             torch = None
-
-        # Try PyTorch / LSTM first
         if torch is not None:
             try:
                 ckpt = torch.load(path, map_location="cpu", weights_only=False)
@@ -210,25 +229,6 @@ class Pipeline:
                         return trainer
             except Exception as e:
                 logger.debug(f"Not a torch checkpoint: {e}")
-
-        # Try JSON linear-world-model format
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                d = json.load(f)
-            if isinstance(d, dict) and "W" in d and d.get("W"):
-                n_feat = int(d.get("n_features", self.n_features))
-                if isinstance(d["W"], list):
-                    n_feat_rows = len(d["W"])
-                    if n_feat_rows:
-                        n_feat = n_feat_rows
-                from netwatch.models.linear_world_model import LinearWorldModel
-                model = LinearWorldModel(n_features=n_feat)
-                trainer = WorldModelTrainer(model=model, model_type="linear", n_features=n_feat)
-                if trainer.load(str(path)):
-                    logger.info(f"Detected JSON linear-world-model checkpoint ({n_feat} features)")
-                    return trainer
-        except Exception as e:
-            logger.debug(f"Not a JSON linear checkpoint: {e}")
 
         return None
 
