@@ -126,7 +126,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           if (p.status === "error") {
             setRunning(false);
             setAnalyzing(false);
-            setError(p.error ?? "Analysis failed.");
+            setError(p.error ?? p.message ?? "Analysis failed.");
             return;
           }
           pollTimer.current = window.setTimeout(poll, 750);

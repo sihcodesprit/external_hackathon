@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 
 export default function AnalyzePCAP() {
-  const { doc, job, running } = useAnalysis();
+  const { doc, job, running, status, error } = useAnalysis();
   const navigate = useNavigate();
 
   return (
@@ -21,9 +21,25 @@ export default function AnalyzePCAP() {
 
       <FileUploader />
 
-      {running && doc === null && (
+      {(running || status === "error") && doc === null && (
         <div style={{ marginTop: 16 }}>
           <JobProgress job={job} />
+          {status === "error" && error && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "10px 14px",
+                borderRadius: 8,
+                background: "rgba(239,68,68,0.12)",
+                border: "1px solid rgba(239,68,68,0.4)",
+                color: "#f87171",
+                fontSize: 12,
+                lineHeight: 1.55,
+              }}
+            >
+              {error}
+            </div>
+          )}
         </div>
       )}
 
