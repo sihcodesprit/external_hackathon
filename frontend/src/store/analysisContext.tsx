@@ -56,6 +56,12 @@ function readPersistedId(): string | null {
   }
 }
 
+/** A 404 from the canonical-analysis endpoints means "nothing to show yet"
+ * (no active analysis / server restarted), not a hard failure. */
+function isNotFound(e: unknown): boolean {
+  return (e instanceof Error && (e as Error & { status?: number }).status === 404) || false;
+}
+
 export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [doc, setDocRaw] = useState<AnalysisDoc | null>(null);
   const [job, setJob] = useState<JobPoll | null>(null);
@@ -168,6 +174,14 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         setStatus("idle");
       }
     } catch (e) {
+      if (isNotFound(e)) {
+        setDocRaw(null);
+        setAnalysisId(null);
+        persistActiveId(null);
+        setError(null);
+        setStatus("idle");
+        return;
+      }
       setError(e instanceof Error ? e.message : String(e));
       setStatus("error");
     }
@@ -213,6 +227,11 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         setStatus("idle");
       }
     } catch (e) {
+      if (isNotFound(e)) {
+        setStatus("idle");
+        setError(null);
+        return;
+      }
       setError(e instanceof Error ? e.message : String(e));
       setStatus("error");
     }
