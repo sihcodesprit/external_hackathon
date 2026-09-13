@@ -56,7 +56,6 @@ _jobs_history_lock = threading.Lock()
 # Lazy background prewarm so the first page request never blocks
 # behind the (heavy) pipeline load: assets and health answer instantly.
 _PREWARM_STARTED = False
-_SYSTEM_TORCH = "unavailable"   # filled by the background prewarm thread
 
 
 def _ensure_prewarm() -> None:
@@ -68,17 +67,11 @@ def _ensure_prewarm() -> None:
     _PREWARM_STARTED = True
 
     def body() -> None:
-        global _SYSTEM_TORCH
         try:
             _build_pipeline()
             logger.info("Background pipeline prewarm complete.")
         except Exception as e:  # noqa: BLE001
             logger.warning("Background pipeline prewarm failed: %s", e)
-        try:
-            import torch  # warm lazily so /api/system never blocks a request
-            _SYSTEM_TORCH = torch.__version__
-        except Exception:  # noqa: BLE001
-            pass
 
     threading.Thread(target=body, daemon=True, name="netwatch-prewarm").start()
 
@@ -459,7 +452,8 @@ def create_app():
         import platform
         import sys
         from time import time
-        _torch = _SYSTEM_TORCH
+        torch_mod = sys.modules.get("torch")
+        _torch = torch_mod.__version__ if torch_mod is not None else "unavailable"
         try:
             import numpy as np
             _numpy = np.__version__

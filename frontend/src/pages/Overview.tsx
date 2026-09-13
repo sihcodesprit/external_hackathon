@@ -31,34 +31,36 @@ export default function Overview() {
       </div>
 
       <RequireAnalysis>
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <ThreatHeader doc={doc!} />
+        {(doc) => (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <ThreatHeader doc={doc} />
 
-          <Grid cols="repeat(4, 1fr)" gap={12}>
-            <MetricCard label="Records" value={fmtInt(doc!.traffic_summary?.n_packets)} sub={`${fmtInt(doc!.traffic_summary?.n_flows)} flows`} />
-            <MetricCard label="Network states" value={fmtInt(doc!.n_states)} sub="windowed feature vectors" tone="accent" />
-            <MetricCard label="Hosts" value={fmtInt(doc!.traffic_summary?.n_hosts)} sub={doc!.traffic_summary?.n_hosts ? "discovered via entity resolution" : undefined} />
-            <MetricCard label="Duration" value={`${(doc!.traffic_summary?.duration_seconds ?? 0).toFixed(1)}s`} sub="capture time span" />
-          </Grid>
+            <Grid cols="repeat(4, 1fr)" gap={12}>
+              <MetricCard label="Records" value={fmtInt(doc.traffic_summary?.n_packets)} sub={`${fmtInt(doc.traffic_summary?.n_flows)} flows`} />
+              <MetricCard label="Network states" value={fmtInt(doc.n_states)} sub="windowed feature vectors" tone="accent" />
+              <MetricCard label="Hosts" value={fmtInt(doc.traffic_summary?.n_hosts)} sub={doc.traffic_summary?.n_hosts ? "discovered via entity resolution" : undefined} />
+              <MetricCard label="Duration" value={`${(doc.traffic_summary?.duration_seconds ?? 0).toFixed(1)}s`} sub="capture time span" />
+            </Grid>
 
-          <Grid cols="2fr 1fr" gap={14}>
-            <Card title="Forecast trajectory" subtitle="World model K-step projection of network risk and stage">
-              {doc!.forecast ? <ForecastTimeline forecast={doc!.forecast} /> : null}
-            </Card>
-            <Card title="Ensemble detectors" subtitle="Multi-engine threat consensus">
-              {doc!.ensemble ? <DetectorList detectors={doc!.ensemble.detectors} /> : null}
-            </Card>
-          </Grid>
+            <Grid cols="2fr 1fr" gap={14}>
+              <Card title="Forecast trajectory" subtitle="World model K-step projection of network risk and stage">
+                {doc.forecast ? <ForecastTimeline forecast={doc.forecast} /> : null}
+              </Card>
+              <Card title="Ensemble detectors" subtitle="Multi-engine threat consensus">
+                {doc.ensemble ? <DetectorList detectors={doc.ensemble.detectors} /> : null}
+              </Card>
+            </Grid>
 
-          <Grid cols="2fr 1fr" gap={14}>
-            <TrafficSummary summary={doc!.traffic_summary} />
-            <Card title="Detector radar" subtitle="Normalized scores across engines">
-              {doc!.ensemble?.radar_data ? <RadarChart radar={doc!.ensemble.radar_data} /> : null}
-            </Card>
-          </Grid>
+            <Grid cols="2fr 1fr" gap={14}>
+              <TrafficSummary summary={doc.traffic_summary} />
+              <Card title="Detector radar" subtitle="Normalized scores across engines">
+                {doc.ensemble?.radar_data ? <RadarChart radar={doc.ensemble.radar_data} /> : null}
+              </Card>
+            </Grid>
 
-          <CounterfactualPanel doc={doc!} compact />
-        </div>
+            <CounterfactualPanel doc={doc} compact />
+          </div>
+        )}
       </RequireAnalysis>
     </div>
   );

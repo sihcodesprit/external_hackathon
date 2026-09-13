@@ -82,10 +82,14 @@ export function Sidebar() {
               transition: `background ${motion.fast}, color ${motion.fast}`,
             })}
           >
-            <span style={{ width: 16, textAlign: "center", fontSize: 13, opacity: isActive ? 1 : 0.7 }}>
-              {item.icon}
-            </span>
-            {item.label}
+            {({ isActive }) => (
+              <>
+                <span style={{ width: 16, textAlign: "center", fontSize: 13, opacity: isActive ? 1 : 0.7 }}>
+                  {item.icon}
+                </span>
+                {item.label}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>

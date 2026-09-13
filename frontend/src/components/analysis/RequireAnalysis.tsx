@@ -3,13 +3,14 @@ import { palette } from "../../styles/theme";
 import { useAnalysis } from "../../store/analysisContext";
 import { JobProgress } from "./JobProgress";
 import { EmptyState } from "../ui/displays";
+import type { AnalysisDoc } from "../../types";
 
 export function RequireAnalysis({
   children,
   hint = "Load a PCAP, CSV or JSONL capture — or run a synthetic scenario — to generate live analysis using the Cyber World Model engine.",
   action,
 }: {
-  children: ReactNode;
+  children: ReactNode | ((doc: AnalysisDoc) => ReactNode);
   hint?: string;
   action?: ReactNode;
 }) {
@@ -32,6 +33,9 @@ export function RequireAnalysis({
     );
   }
 
+  if (typeof children === "function") {
+    return <>{children(doc)}</>;
+  }
   return <>{children}</>;
 }
 
