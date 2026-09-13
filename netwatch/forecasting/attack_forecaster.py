@@ -25,6 +25,25 @@ from netwatch.models.base_model import WorldModel
 
 logger = logging.getLogger(__name__)
 
+# Stage-related features read by StagePredictor are named differently in the
+# world-model vector vocabulary (payload_size_mean / packet_rate / ...). When a
+# predicted state vector is decoded back to raw features, stage features must be
+# aliased so the stage predictor sees real values instead of always-zero.
+_STAGE_FEATURE_ALIASES = {
+    "payload_mean": ["payload_size_mean"],
+    "payload_max": ["payload_size_max", "payload_size_mean"],
+    "packets_per_second": ["packet_rate"],
+    "unique_dst_ports": ["unique_dst_ports"],
+    "unique_dst_hosts": ["unique_dst_hosts"],
+    "port_entropy": ["port_entropy"],
+    "dest_port_entropy": ["dst_port_entropy"],
+    "syn_rate": ["syn_rate"],
+    "ack_rate": ["ack_rate"],
+    "rst_rate": ["rst_rate"],
+    "bytes": ["total_bytes"],
+    "packets": ["total_packets"],
+}
+
 
 class AttackForecaster:
     """K-step forward attack forecasting from a window of NetworkStates."""
@@ -80,6 +99,15 @@ class AttackForecaster:
             raw[col] = float(
                 vec[i] * self.normalizer.std[i] + self.normalizer.mean[i]
             )
+        # Map world-model vocabulary to the stage predictor's feature names so
+        # predicted stages are driven by real recovered magnitudes and never by
+        # a vocabulary mismatch (which produced all-zero features -> "Benign").
+        for target, sources in _STAGE_FEATURE_ALIASES.items():
+            if target not in raw:
+                for src in sources:
+                    if src in raw:
+                        raw[target] = raw[src]
+                        break
         return NetworkState(timestamp=timestamp, features=raw)
 
     def forecast(self, history_states: List[NetworkState], k: int = 5) -> Dict:
@@ -91,7 +119,10 @@ class AttackForecaster:
         # current state analysis
         current_vec = norm_history[-1]
         current_state = self._state_from_vec(current_vec)
-        current_stage = self.stage_predictor.predict(current_state.features)
+        # Stage is derived from the real observed features of the latest window
+        # (full vocabulary) rather than the normalizer inversion, which only
+        # covers the world-model columns.
+        current_stage = self.stage_predictor.predict(history_states[-1].features)
         current_risk = self._attack_prob(current_vec)
 
         # K-step rollout

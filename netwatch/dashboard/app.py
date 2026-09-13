@@ -53,6 +53,11 @@ _jobs_lock = threading.Lock()
 _jobs_history = []          # summary entries for the Analysis History screen
 _jobs_history_lock = threading.Lock()
 
+# ── Model Test Center job registry (owned by the backend so runs survive
+# navigation and browser refresh) ──────────────────────────────────────────
+_model_test_jobs = {}
+_model_test_jobs_lock = threading.Lock()
+
 # Lazy background prewarm so the first page request never blocks
 # behind the (heavy) pipeline load: assets and health answer instantly.
 _PREWARM_STARTED = False
@@ -178,6 +183,164 @@ def _update_job(job_id: str, **kwargs):
 def _get_job(job_id: str):
     with _jobs_lock:
         return _jobs.get(job_id)
+
+
+# ── Model Test Center job helpers ──────────────────────────────────────────
+def _model_test_run_all_order() -> list:
+    return [
+        "packet_features", "flow_features", "tcp_features", "entropy",
+        "temporal", "graph", "network_state", "world_model", "forecasting",
+        "mitre", "explainability", "attack_graph", "counterfactual",
+        "recommendation", "full_pipeline",
+    ]
+
+
+def _model_test_get(job_id: str):
+    with _model_test_jobs_lock:
+        return _model_test_jobs.get(job_id)
+
+
+def _model_test_update(job_id: str, **kwargs):
+    with _model_test_jobs_lock:
+        job = _model_test_jobs.get(job_id)
+        if job:
+            job.update(kwargs)
+            job["updated_at"] = datetime.now().isoformat()
+
+
+def _new_model_test_job() -> str:
+    """Create a backend-owned model test job and return its id."""
+    from netwatch.dashboard.analysis import run_module_test
+    pipe = _build_pipeline_unlocked()
+    records = _get_last_records() or []
+
+    job_id = uuid.uuid4().hex[:12]
+    now = datetime.now().isoformat()
+
+    source = {
+        "filename": _pipeline_cache.get("upload_meta", {}).get("filename") or "capture",
+        "member": _pipeline_cache.get("upload_meta", {}).get("member"),
+        "source": _pipeline_cache.get("upload_meta", {}).get("source"),
+        "n_records": len(records),
+        "n_states": len(getattr(pipe, "states", []) or []),
+    }
+    flow_keys = set()
+    for r in records:
+        flow_keys.add((getattr(r, "src_ip", ""), getattr(r, "dst_ip", ""),
+                       getattr(r, "dst_port", 0), getattr(r, "protocol", "")))
+    source["n_flows"] = len(flow_keys)
+
+    module_defs = _model_test_module_defs()
+    modules = [{
+        "id": mid, "name": name, "description": desc,
+        "status": "queued", "metrics": {}, "message": None,
+    } for mid, name, desc in module_defs]
+
+    job = {
+        "job_id": job_id,
+        "status": "queued",
+        "progress": 0,
+        "current_module": None,
+        "modules": modules,
+        "source": source,
+        "created_at": now,
+        "started_at": None,
+        "finished_at": None,
+        "updated_at": now,
+        "error": None,
+    }
+    with _model_test_jobs_lock:
+        _model_test_jobs[job_id] = job
+    return job_id
+
+
+def _model_test_module_defs() -> list:
+    defs = {
+        "packet_features": ("Packet Features", "TTL, payload size and TCP window statistics."),
+        "flow_features": ("Flow Features", "Flow count and flow-to-packet structure."),
+        "tcp_features": ("TCP Features", "TCP handshake counts, asymmetry and RST behaviour."),
+        "entropy": ("Entropy Features", "Shannon entropy of ports, hosts, sizes and flags."),
+        "temporal": ("Temporal Features", "Inter-arrival time, jitter and burstiness."),
+        "graph": ("Graph Features", "Topology node/edge metrics and density."),
+        "network_state": ("Network State", "Windowed state construction and feature vector."),
+        "world_model": ("World Model", "K-step rollout risk projection."),
+        "forecasting": ("Forecasting", "Per-step risk, stage and confidence."),
+        "mitre": ("MITRE Mapping", "Kill-chain stage to MITRE ATT&CK mapping."),
+        "explainability": ("Explainability", "Top contributing features and temporal drivers."),
+        "attack_graph": ("Attack Graph", "Predicted stage-transition graph."),
+        "counterfactual": ("Counterfactual", "Defensive action risk trajectories."),
+        "recommendation": ("Recommendation", "Best defensive action by predicted risk reduction."),
+        "full_pipeline": ("Full Pipeline", "End-to-end ingestion -> forecast -> simulation."),
+    }
+    return [(mid,) + defs[mid] for mid in _model_test_run_all_order()]
+
+
+def _run_single_model_test(job_id: str, module_id: str) -> dict:
+    from netwatch.dashboard.analysis import run_module_test
+    pipe = _build_pipeline_unlocked()
+    records = _get_last_records() or []
+    _model_test_update(job_id, current_module=module_id, status="running")
+    result = run_module_test(module_id, pipe, records)
+    with _model_test_jobs_lock:
+        job = _model_test_jobs.get(job_id)
+        if job and result.get("status") == "ok":
+            for m in job["modules"]:
+                if m["id"] == module_id:
+                    m["status"] = "ok"
+                    m["message"] = None
+                    m["metrics"] = result.get("metrics", {})
+                    m["steps"] = result.get("steps")
+                    m["trajectory"] = result.get("trajectory")
+                    m["graph"] = result.get("graph")
+                    m["recommendation"] = result.get("recommendation")
+                    m["counterfactual"] = result.get("counterfactual")
+                    break
+        elif job and result.get("status") == "error":
+            for m in job["modules"]:
+                if m["id"] == module_id:
+                    m["status"] = "failed"
+                    m["message"] = result.get("message", "Module failed.")
+                    break
+    return result
+
+
+def _retry_model_test(job_id: str, module_id: str):
+    """Re-run a single failed module inside an existing job."""
+    try:
+        _run_single_model_test(job_id, module_id)
+        job = _model_test_get(job_id)
+        failures = sum(1 for m in (job or {}).get("modules", []) if m.get("status") == "failed")
+        _model_test_update(job_id,
+                           status="completed" if not failures else "partial_failed",
+                           progress=100, current_module=None,
+                           finished_at=datetime.now().isoformat())
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Retry module %s on job %s failed", module_id, job_id)
+        _model_test_update(job_id, status="error", current_module=None,
+                           error=str(e), finished_at=datetime.now().isoformat())
+
+
+def _run_model_test_job(job_id: str):
+    """Background worker: execute modules in dependency order, updating progress."""
+    try:
+        _model_test_update(job_id, status="running", started_at=datetime.now().isoformat(),
+                           current_module="Preparing", progress=2)
+        order = _model_test_run_all_order()
+        total = len(order)
+        for i, module_id in enumerate(order):
+            _model_test_update(job_id, current_module=module_id,
+                               progress=round(i / total * 100))
+            _run_single_model_test(job_id, module_id)
+            _model_test_update(job_id, progress=round((i + 1) / total * 100))
+        job = _model_test_get(job_id)
+        failures = sum(1 for m in (job or {}).get("modules", []) if m.get("status") == "failed")
+        _model_test_update(job_id, status="completed" if not failures else "partial_failed",
+                           progress=100, current_module=None,
+                           finished_at=datetime.now().isoformat())
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Model test job %s failed", job_id)
+        _model_test_update(job_id, status="error", current_module=None,
+                           error=str(e), finished_at=datetime.now().isoformat())
 
 
 def _get_last_records():
@@ -706,30 +869,13 @@ def create_app():
         return jsonify(result)
 
     # ── Model Test Center ─────────────────────────────────────
-    MODULE_TEST_DEFS = [
-        ("packet_features", "Packet Features", "TTL, payload size and TCP window statistics."),
-        ("flow_features", "Flow Features", "Flow count and flow-to-packet structure."),
-        ("tcp_features", "TCP Features", "TCP handshake counts, asymmetry and RST behaviour."),
-        ("entropy", "Entropy Features", "Shannon entropy of ports, hosts, sizes and flags."),
-        ("temporal", "Temporal Features", "Inter-arrival time, jitter and burstiness."),
-        ("graph", "Graph Features", "Topology node/edge metrics and density."),
-        ("network_state", "Network State", "Windowed state construction and feature vector."),
-        ("world_model", "World Model", "LSTM K-step rollout risk projection."),
-        ("forecasting", "Forecasting", "Per-step risk, stage and confidence."),
-        ("mitre", "MITRE Mapping", "Kill-chain stage to MITRE ATT&CK mapping."),
-        ("explainability", "Explainability", "Top contributing features and temporal drivers."),
-        ("attack_graph", "Attack Graph", "Predicted stage-transition graph."),
-        ("counterfactual", "Counterfactual", "Defensive action risk trajectories."),
-        ("recommendation", "Recommendation", "Best defensive action by predicted risk reduction."),
-        ("full_pipeline", "Full Pipeline", "End-to-end ingestion → forecast → simulation."),
-    ]
 
     @app.route("/api/test-modules")
     def api_test_modules():
         pipe = _pipeline_cache.get("default")
         has_data = bool(pipe and getattr(pipe, "states", []))
         modules = [{"id": mid, "name": name, "description": desc, "has_data": has_data}
-                   for mid, name, desc in MODULE_TEST_DEFS]
+                   for mid, name, desc in _model_test_module_defs()]
         return jsonify({"modules": modules})
 
     @app.route("/api/test-module/<module_id>", methods=["POST"])
@@ -738,6 +884,48 @@ def create_app():
         from netwatch.dashboard.analysis import run_module_test
         result = run_module_test(module_id, pipe, _get_last_records() or [])
         return jsonify(result)
+
+    @app.route("/api/model-test/jobs", methods=["POST"])
+    def api_model_test_create():
+        pipe = _build_pipeline()
+        if not getattr(pipe, "states", []) or not _get_last_records():
+            return jsonify({"error": "No analysis data loaded. Upload a capture or run a scenario first."}), 409
+        job_id = _new_model_test_job()
+        t = threading.Thread(target=_run_model_test_job, args=(job_id,), daemon=True)
+        t.start()
+        return jsonify({"job_id": job_id})
+
+    @app.route("/api/model-test/jobs")
+    def api_model_test_list():
+        with _model_test_jobs_lock:
+            jobs = sorted(_model_test_jobs.values(),
+                          key=lambda j: j.get("created_at", ""), reverse=True)
+            return jsonify({"jobs": [{
+                "job_id": j["job_id"], "status": j.get("status"),
+                "progress": j.get("progress"), "current_module": j.get("current_module"),
+                "created_at": j.get("created_at"), "finished_at": j.get("finished_at"),
+                "source": j.get("source", {}),
+            } for j in jobs[:50]]})
+
+    @app.route("/api/model-test/jobs/<job_id>")
+    def api_model_test_get(job_id):
+        job = _model_test_get(job_id)
+        if not job:
+            return jsonify({"error": "Model test job not found"}), 404
+        return jsonify(job)
+
+    @app.route("/api/model-test/jobs/<job_id>/retry/<module_id>", methods=["POST"])
+    def api_model_test_retry(job_id, module_id):
+        job = _model_test_get(job_id)
+        if not job:
+            return jsonify({"error": "Model test job not found"}), 404
+        if not any(m["id"] == module_id for m in job.get("modules", [])):
+            return jsonify({"error": f"Unknown module: {module_id}"}), 400
+        _model_test_update(job_id, status="running", current_module=module_id,
+                           progress=0, error=None)
+        t = threading.Thread(target=_retry_model_test, args=(job_id, module_id), daemon=True)
+        t.start()
+        return jsonify({"job_id": job_id, "module": module_id})
 
     # ── Analysis history & report ─────────────────────────────
     @app.route("/api/history")
@@ -846,7 +1034,7 @@ def _process_zip_traffic(file, original_filename: str) -> dict:
             file.stream.seek(0)
             return _install_model_zip(file)
         records = ingest(extracted, kind=_kind_for(Path(chosen).suffix))
-        result = _process_traffic_records(records, original_filename)
+        result = _process_traffic_records(records, original_filename, member=chosen)
         if "error" not in result:
             result["source_in_zip"] = chosen
         return result
@@ -856,7 +1044,7 @@ def _process_zip_traffic(file, original_filename: str) -> dict:
         tmp_path.unlink(missing_ok=True)
 
 
-def _process_traffic_records(records: list, filename: str) -> dict:
+def _process_traffic_records(records: list, filename: str, member: str | None = None) -> dict:
     """Process traffic records synchronously and cache the result."""
     if not records:
         return {"error": "No valid packet or flow records found."}
@@ -870,7 +1058,7 @@ def _process_traffic_records(records: list, filename: str) -> dict:
         pipe = _build_pipeline()
 
     with _pipeline_lock:
-        doc = analyze_records(records, filename=filename, source_label="User Uploaded PCAP",
+        doc = analyze_records(records, filename=filename, member=member, source_label="User Uploaded PCAP",
                               pipeline_factory=lambda: pipe)
         if not doc or doc.get("status") != "ok":
             return {"error": doc.get("error", "Analysis failed.")} if doc else {"error": "Analysis failed."}
@@ -878,13 +1066,13 @@ def _process_traffic_records(records: list, filename: str) -> dict:
         _pipeline_cache["default"] = pipe
         _pipeline_cache["last_result"] = doc
         _pipeline_cache["upload_meta"] = {
-            "filename": filename, "member": None, "source": "User Uploaded PCAP",
+            "filename": filename, "member": member, "source": "User Uploaded PCAP",
             "occurrence": None, "n_records": len(records),
             "n_states": doc.get("n_states", 0), "uploaded_at": datetime.now().isoformat(),
         }
 
     _record_history(uuid.uuid4().hex[:12], doc, meta={
-        "filename": filename, "source": "User Uploaded PCAP", "occurrence": None,
+        "filename": filename, "member": member, "source": "User Uploaded PCAP", "occurrence": None,
         "created_at": datetime.now().isoformat()})
 
     return {

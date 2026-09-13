@@ -83,23 +83,43 @@ def compute_base_features(pkts: List[PacketRecord], actual_window_seconds: float
     rst_rate = rst / duration
     syn_ack_ratio = syn / max(ack, 1)
 
+    payload_mean = statistics.mean(payloads) if payloads else 0.0
+    payload_max = float(max(payloads)) if payloads else 0.0
+    tcp_window_mean = statistics.mean(windows) if windows else 0.0
+    packets_per_second = total / duration
+    port_entropy = _port_entropy(ports)
+    total_bytes = float(sum(p.bytes_sent for p in pkts))
+
     features: Dict[str, float] = {
-        "bytes": float(sum(p.bytes_sent for p in pkts)),
+        "bytes": total_bytes,
         "packets": float(total),
         "ttl_mean": statistics.mean(ttls) if ttls else 0.0,
-        "payload_mean": statistics.mean(payloads) if payloads else 0.0,
-        "payload_max": float(max(payloads)) if payloads else 0.0,
-        "tcp_window_mean": statistics.mean(windows) if windows else 0.0,
-        "packets_per_second": total / duration,
-        "connection_rate": total / duration,
+        "payload_mean": payload_mean,
+        "payload_max": payload_max,
+        "tcp_window_mean": tcp_window_mean,
+        "packets_per_second": packets_per_second,
+        "connection_rate": packets_per_second,
         "unique_dst_ports": float(len(set(ports))),
         "unique_dst_hosts": float(len(dst_hosts)),
         "syn_rate": syn_rate,
         "ack_rate": ack_rate,
         "rst_rate": rst_rate,
         "syn_ack_ratio": syn_ack_ratio,
-        "port_entropy": _port_entropy(ports),
+        "port_entropy": port_entropy,
     }
+    # Mirror names used by the world-model feature vector (get_feature_columns)
+    # so state vectors carry real magnitudes for these features.
+    features.update({
+        "payload_size_mean": payload_mean,
+        "payload_size_max": payload_max,
+        "packet_rate": packets_per_second,
+        "byte_rate": total_bytes / duration,
+        "flow_rate": packets_per_second,
+        "total_packets": float(total),
+        "total_bytes": total_bytes,
+        "average_packet_size": (total_bytes / total) if total else 0.0,
+        "dst_port_entropy": port_entropy,
+    })
     return features
 
 

@@ -12,6 +12,7 @@ const Mitre = lazy(() => import("./pages/Mitre"));
 const Explainability = lazy(() => import("./pages/Explainability"));
 const CounterfactualLab = lazy(() => import("./pages/CounterfactualLab"));
 const ModelTestCenter = lazy(() => import("./pages/ModelTestCenter"));
+const ModelTestRun = lazy(() => import("./pages/ModelTestRun"));
 const Evaluation = lazy(() => import("./pages/Evaluation"));
 const Scenarios = lazy(() => import("./pages/Scenarios"));
 const History = lazy(() => import("./pages/History"));
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/explainability" element={<Explainability />} />
           <Route path="/counterfactual" element={<CounterfactualLab />} />
           <Route path="/model-test" element={<ModelTestCenter />} />
+          <Route path="/model-test/run/:jobId" element={<ModelTestRun />} />
           <Route path="/evaluation" element={<Evaluation />} />
           <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/history" element={<History />} />

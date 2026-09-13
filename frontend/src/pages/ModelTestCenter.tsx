@@ -1,21 +1,31 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { palette } from "../styles/theme";
 import { api } from "../services/api";
-import type { ModuleTestInfo, ModuleTestResult } from "../types";
+import type { ModuleTestInfo, ModuleTestResult, ModelTestJobSummary } from "../types";
+import { useAnalysis } from "../store/analysisContext";
 import { RequireAnalysis } from "../components/analysis/RequireAnalysis";
-import { Card, Grid, Pill, Tag } from "../components/ui/primitives";
+import { Card, Pill, Tag } from "../components/ui/primitives";
 import { Button } from "../components/ui/Button";
 import { ErrorState, PageLoader } from "../components/ui/displays";
 import { useFetch } from "../hooks/useFetch";
+import { VisualizationBoundary } from "../components/ui/VisualizationBoundary";
 import { AttackGraphView } from "../components/charts/AttackGraphView";
 import { fmtNum } from "../utils/format";
 
 export default function ModelTestCenter() {
-  const { data, loading, error } = useFetch(() => api.testModules(), []);
+  const navigate = useNavigate();
+  const { data, loading, error, refresh } = useFetch(() => api.testModules(), []);
+  const jobsFetcher = useFetch<ModelTestJobSummary[]>(() => api.modelTestJobs(), []);
+  const { doc } = useAnalysis();
+
   const [runningId, setRunningId] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ModuleTestResult>>({});
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const modules: ModuleTestInfo[] = data ?? [];
+  const hasAnyData = modules.some((m) => m.has_data);
 
   const run = async (id: string) => {
     setRunningId(id);
@@ -33,36 +43,102 @@ export default function ModelTestCenter() {
   };
 
   const runAll = async () => {
-    for (const m of modules) {
-      if (!m.has_data) continue;
-      setRunningId(m.id);
-      try {
-        const res = await api.runTestModule(m.id);
-        setResults((r) => ({ ...r, [m.id]: res }));
-      } catch (e) {
-        setResults((r) => ({ ...r, [m.id]: { status: "error", module: m.id, message: "failed" } as ModuleTestResult }));
-      }
-      setRunningId(null);
+    if (starting || runningId !== null) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      const { job_id } = await api.createModelTestJob();
+      navigate(`/model-test/run/${job_id}`);
+    } catch (e) {
+      setStartError(e instanceof Error ? e.message : String(e));
+      setStarting(false);
     }
   };
 
   if (loading) return <PageLoader label="Loading model modules…" />;
   if (error) return <ErrorState message={error} />;
 
+  const currentJob = doc
+    ? { filename: doc.member ?? doc.filename ?? "capture", packets: doc.n_records ?? 0, states: doc.n_states ?? 0 }
+    : null;
+
   return (
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Model Test Center</h1>
       <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Run each module against the loaded capture to validate the software-defined model stack.
+        Test every AI module independently or run the full pipeline against the loaded capture.
       </p>
 
-      <ControllerToast modules={modules} resultCount={Object.keys(results).length}>
-        <div style={{ display: "flex", gap: 10 }}>
-          <Button onClick={runAll} disabled={runningId !== null || modules.every((m) => !m.has_data)} loading={runningId !== null}>
-            Run all modules
-          </Button>
+      <Card title={"Input"}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+            {currentJob ? (
+              <>
+                <div>
+                  <div style={{ fontSize: 10.5, color: palette.textMuted, textTransform: "uppercase", letterSpacing: 0.4 }}>Capture</div>
+                  <div className="mono" style={{ fontSize: 12.5, color: palette.text }}>{currentJob.filename}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, color: palette.textMuted, textTransform: "uppercase", letterSpacing: 0.4 }}>Records</div>
+                  <div className="mono" style={{ fontSize: 12.5, color: palette.text }}>{fmtNum(currentJob.packets, 0)} packets</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, color: palette.textMuted, textTransform: "uppercase", letterSpacing: 0.4 }}>States</div>
+                  <div className="mono" style={{ fontSize: 12.5, color: palette.text }}>{currentJob.states}</div>
+                </div>
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: palette.textMuted }}>
+                Load a capture or run a scenario to populate the module inputs.
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Button
+              onClick={runAll}
+              disabled={starting || !hasAnyData || runningId !== null}
+              loading={starting}
+            >
+              Run All Modules
+            </Button>
+            <span style={{ fontSize: 11.5, color: palette.textMuted }}>
+              {starting ? "Starting…" : ""}
+            </span>
+          </div>
         </div>
-      </ControllerToast>
+        {startError && <div style={{ marginTop: 10, fontSize: 12, color: palette.danger }}>⚠ {startError}</div>}
+      </Card>
+
+      {jobsFetcher.data && jobsFetcher.data.length > 0 && (
+        <Card title="Recent runs" style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {jobsFetcher.data.slice(0, 8).map((job) => (
+              <Link
+                key={job.job_id}
+                to={`/model-test/run/${job.job_id}`}
+                style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                  padding: "7px 10px", borderRadius: 8, background: "rgba(16,24,42,0.5)",
+                  border: `1px solid ${palette.borderSoft}`,
+                }}
+              >
+                <span className="mono" style={{ fontSize: 11.5, color: palette.text }}>
+                  {job.job_id}
+                </span>
+                <span style={{ fontSize: 11.5, color: palette.textDim, flex: 1 }}>
+                  {job.source?.filename ?? "capture"}
+                </span>
+                <Pill tone={job.status === "completed" ? "good" : job.status === "partial_failed" ? "warn" : job.status === "failed" ? "danger" : "warn"}>
+                  {job.status}
+                </Pill>
+                <span className="mono" style={{ fontSize: 11, color: palette.textMuted }}>
+                  {job.progress}%
+                </span>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <RequireAnalysis hint="The test center runs each module against live analysis data — load a capture or scenario first.">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14, marginTop: 16 }}>
@@ -77,16 +153,15 @@ export default function ModelTestCenter() {
           ))}
         </div>
       </RequireAnalysis>
-    </div>
-  );
-}
 
-function ControllerToast({ children }: { children: React.ReactNode; modules: ModuleTestInfo[]; resultCount: number }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 4 }}>
-      <span style={{ fontSize: 12, color: palette.textDim }}>
-        {children}
-      </span>
+      <div style={{ marginTop: 8 }}>
+        <button
+          onClick={refresh}
+          style={{ border: "none", background: "transparent", color: palette.textMuted, fontSize: 11.5, cursor: "pointer" }}
+        >
+          Refresh module availability
+        </button>
+      </div>
     </div>
   );
 }
@@ -161,7 +236,9 @@ function ModuleCard({
         )}
         {ok && result?.graph && (
           <div style={{ marginTop: 8 }}>
-            <AttackGraphView graph={result.graph} />
+            <VisualizationBoundary label={`ModuleCard:${module.id}`}>
+              <AttackGraphView graph={result.graph} />
+            </VisualizationBoundary>
           </div>
         )}
         {ok && result?.recommendation && (

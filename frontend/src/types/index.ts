@@ -174,19 +174,37 @@ export interface PredictGraphNode {
   probability: number;
   stage: string;
   step?: number;
+  confidence?: number;
+  evidence?: unknown[];
 }
 
 export interface PredictGraphEdge {
+  id?: string;
   source: string;
   target: string;
   weight: number;
   label: string;
+  transition?: boolean;
+}
+
+export interface GraphTimelineStep {
+  step: number;
+  stage: string;
+  risk: number;
+  confidence: number;
+  probability: number;
 }
 
 export interface PredictGraph {
   nodes: PredictGraphNode[];
   edges: PredictGraphEdge[];
-  counts: { nodes: number; edges: number };
+  counts: { nodes: number; edges: number; forecast_steps: number; stages: number; transitions: number };
+  timeline?: GraphTimelineStep[];
+  stages?: string[];
+  stage_nodes?: PredictGraphNode[];
+  stage_edges?: PredictGraphEdge[];
+  benign_only?: boolean;
+  unknown_stage?: boolean;
 }
 
 export interface EnsembleDetector {
@@ -369,6 +387,51 @@ export type ModuleTestResult = Record<string, unknown> & {
   current?: unknown;
   temporal?: unknown;
 };
+
+export interface ModelTestModuleStatus {
+  id: string;
+  name: string;
+  description: string;
+  status: "queued" | "running" | "ok" | "failed" | "skipped";
+  message?: string | null;
+  metrics?: Record<string, number>;
+  steps?: Array<Record<string, unknown>>;
+  trajectory?: MitreTrajectoryStep[];
+  graph?: PredictGraph;
+  recommendation?: Record<string, unknown>;
+  counterfactual?: Record<string, unknown>;
+}
+
+export interface ModelTestRunJob {
+  job_id: string;
+  status: string;
+  progress: number;
+  current_module: string | null;
+  modules: ModelTestModuleStatus[];
+  source: {
+    filename?: string;
+    member?: string | null;
+    source?: string;
+    n_records: number;
+    n_states: number;
+    n_flows: number;
+  };
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at?: string;
+  error?: string | null;
+}
+
+export interface ModelTestJobSummary {
+  job_id: string;
+  status: string;
+  progress: number;
+  current_module: string | null;
+  created_at: string;
+  finished_at: string | null;
+  source: { filename?: string; member?: string | null; n_records: number; n_states: number; n_flows: number };
+}
 
 export interface ReportDocument {
   status: string;

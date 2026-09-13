@@ -426,7 +426,14 @@ class Pipeline:
                 "graph": {
                     "nodes": [],
                     "edges": [],
-                    "counts": {"nodes": 0, "edges": 0},
+                    "timeline": [],
+                    "stages": [],
+                    "stage_nodes": [],
+                    "stage_edges": [],
+                    "benign_only": False,
+                    "unknown_stage": False,
+                    "counts": {"nodes": 0, "edges": 0, "forecast_steps": 0,
+                               "stages": 0, "transitions": 0},
                 },
                 "counterfactual": {
                     "baseline_risk": 0.0,

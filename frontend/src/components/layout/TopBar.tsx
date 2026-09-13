@@ -17,7 +17,6 @@ export function TopBar() {
       .health()
       .then(() => undefined)
       .catch(() => undefined);
-    setInterval(() => {}, 1000);
     api
       .systemInfo()
       .then((s) => {

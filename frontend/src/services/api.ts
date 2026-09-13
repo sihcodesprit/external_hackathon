@@ -6,7 +6,8 @@ import type {
   MitreTrajectoryStep,
   ModuleTestInfo,
   ModuleTestResult,
-  ModelStatus,
+  ModelTestJobSummary,
+  ModelTestRunJob,
   ReportDocument,
   ScenarioInfo,
   SystemInfo,
@@ -98,6 +99,20 @@ export const api = {
 
   runTestModule: (moduleId: string) =>
     request<ModuleTestResult>(`/api/test-module/${moduleId}`, { method: "POST" }),
+
+  createModelTestJob: () =>
+    request<{ job_id: string }>("/api/model-test/jobs", { method: "POST" }),
+
+  modelTestJobs: () =>
+    request<{ jobs: ModelTestJobSummary[] }>("/api/model-test/jobs").then((r) => r.jobs),
+
+  modelTestJob: (jobId: string) => request<ModelTestRunJob>(`/api/model-test/jobs/${jobId}`),
+
+  modelTestRetry: (jobId: string, moduleId: string) =>
+    request<{ job_id: string; module: string }>(
+      `/api/model-test/jobs/${jobId}/retry/${moduleId}`,
+      { method: "POST" },
+    ),
 
   modelsStatus: () => request<ModelStatus>("/api/models/status"),
 
