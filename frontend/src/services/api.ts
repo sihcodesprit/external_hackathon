@@ -4,6 +4,12 @@ import type {
   ForecastBlock,
   HistoryEntry,
   JobPoll,
+  LiveAnalysisDoc,
+  LiveHealthInfo,
+  LiveInterface,
+  LiveSessionHistory,
+  LiveStartResponse,
+  LiveStatusResponse,
   MitreTrajectoryStep,
   ModuleTestInfo,
   ModuleTestResult,
@@ -164,6 +170,35 @@ export const api = {
       `/api/counterfactual/${action}`,
       { method: "POST" },
     ),
+
+  // ── Live Monitoring (TShark) ─────────────────────────────
+
+  liveHealth: () => request<LiveHealthInfo>("/api/live/health"),
+
+  liveInterfaces: () =>
+    request<{ interfaces: LiveInterface[] }>("/api/live/interfaces").then((r) => r.interfaces),
+
+  liveStart: (cfg: { interface: string; window_size?: number; step_size?: number; forecast_horizon?: number }) =>
+    request<LiveStartResponse>("/api/live/start", {
+      method: "POST",
+      body: JSON.stringify(cfg),
+    }),
+
+  liveStop: () =>
+    request<{ status: string; analysis_id?: string; sensor_stats?: Record<string, unknown> }>(
+      "/api/live/stop",
+      { method: "POST" },
+    ),
+
+  liveStatus: () => request<LiveStatusResponse>("/api/live/status"),
+
+  liveAnalysisDoc: (analysisId: string) =>
+    request<LiveAnalysisDoc>(`/api/live/analysis/${encodeURIComponent(analysisId)}`),
+
+  liveHistory: () =>
+    request<{ sessions: LiveSessionHistory[] }>("/api/live/history").then((r) => r.sessions),
+
+  liveEventsUrl: () => "/api/live/events",
 };
 
 export function favoriteFeaturePipeline(res: { status?: string }): boolean {

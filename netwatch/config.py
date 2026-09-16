@@ -169,6 +169,28 @@ DASHBOARD_DEBUG = _env_override("FLASK_DEBUG", _get("dashboard.debug", False))
 AUTO_TRAIN_ON_START = _get("dashboard.auto_train_on_start", True)
 DEMO_MODE = _get("dashboard.demo_mode", True)
 
+# ── Live Monitoring (TShark) ──────────────────────────────
+LIVE_ENABLED = _env_override("NETWATCH_LIVE_ENABLED", _get("live.enabled", True))
+LIVE_TSHARK_PATH = _env_override("NETWATCH_TSHARK_PATH", _get("live.tshark_path", "tshark"))
+LIVE_TSHARK_OUTPUT_FORMAT = _env_override("NETWATCH_LIVE_TSHARK_FORMAT", _get("live.output_format", "ek"))
+LIVE_BPF_FILTER = _env_override("NETWATCH_LIVE_BPF_FILTER", _get("live.bpf_filter", ""))
+LIVE_SNAPLEN = _env_override("NETWATCH_LIVE_SNAPLEN", _get("live.snaplen", 65535))
+LIVE_PROMISCUOUS = _env_override("NETWATCH_LIVE_PROMISCUOUS", _get("live.promiscuous", True))
+LIVE_DEFAULT_INTERFACE = _env_override("NETWATCH_LIVE_DEFAULT_INTERFACE", _get("live.default_interface", ""))
+LIVE_WINDOW_SIZE = _env_override("NETWATCH_LIVE_WINDOW_SIZE", _get("live.window_size", 30))
+LIVE_STEP_SIZE = _env_override("NETWATCH_LIVE_STEP_SIZE", _get("live.step_size", 5))
+LIVE_FORECAST_HORIZON = _env_override("NETWATCH_LIVE_FORECAST_HORIZON", _get("live.forecast_horizon", 5))
+LIVE_MAX_EVENT_QUEUE = _env_override("NETWATCH_LIVE_MAX_EVENT_QUEUE", _get("live.max_event_queue", 10000))
+LIVE_MAX_EVENTS_PER_WINDOW = _env_override("NETWATCH_LIVE_MAX_EVENTS_PER_WINDOW", _get("live.max_events_per_window", 8000))
+LIVE_DASHBOARD_UPDATE_INTERVAL = _env_override("NETWATCH_LIVE_DASHBOARD_UPDATE_INTERVAL", _get("live.dashboard_update_interval", 1.0))
+LIVE_MAX_HISTORY_SECONDS = _env_override("NETWATCH_LIVE_MAX_HISTORY_SECONDS", _get("live.max_history_seconds", 600))
+LIVE_MODEL_TYPE = _env_override("NETWATCH_LIVE_MODEL_TYPE", _get("live.model_type", "linear"))
+LIVE_MIN_STATES_FOR_MODEL = _env_override("NETWATCH_LIVE_MIN_STATES_FOR_MODEL", _get("live.min_states_for_model", 8))
+LIVE_MODEL_REFIT_INTERVAL = _env_override("NETWATCH_LIVE_MODEL_REFIT_INTERVAL", _get("live.model_refit_interval", 3))
+LIVE_MAX_STATE_HISTORY = _env_override("NETWATCH_LIVE_MAX_STATE_HISTORY", _get("live.max_state_history", 120))
+LIVE_EVENTS_PER_SECOND_LOG = _env_override("NETWATCH_LIVE_EVENTS_PER_SECOND_LOG", _get("live.events_per_second_log", 1000))
+LIVE_TEST_TIMEOUT = _env_override("NETWATCH_LIVE_TEST_TIMEOUT", _get("live.test_timeout", 30))
+
 # ── Runtime flags ──────────────────────────────────────────
 ENABLE_SHAP = ENABLE_EXPLAINABILITY
 

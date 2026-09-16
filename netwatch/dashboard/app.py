@@ -1087,6 +1087,139 @@ def create_app():
         pipe = _build_pipeline(force_retrain=True)
         return jsonify({"status": "retrained", "n_states": len(pipe.states)})
 
+    # ── Live Monitoring (TShark) API ────────────────────────────
+
+    @app.route("/api/live/health")
+    def api_live_health():
+        """Check TShark availability and version."""
+        from netwatch.live.health import detect_tshark
+        from netwatch.live.config import TSHARK_PATH
+        return jsonify(detect_tshark(TSHARK_PATH))
+
+    @app.route("/api/live/interfaces")
+    def api_live_interfaces():
+        """List available network interfaces (flat shape for the SPA)."""
+        from netwatch.live.interface import discover_interfaces
+        raw = discover_interfaces()
+        interfaces = [{
+            "name": i.get("name", ""),
+            "description": "",
+            "addresses": [a.get("addr", "") for a in i.get("addresses", []) if a.get("addr")],
+            "is_up": str(i.get("state", "")).upper() == "UP",
+        } for i in raw]
+        return jsonify({"interfaces": interfaces})
+
+    @app.route("/api/live/start", methods=["POST"])
+    def api_live_start():
+        """Start a live TShark capture session."""
+        from netwatch.live.manager import LiveManager
+        from netwatch.live.config import (
+            LIVE_DEFAULT_INTERFACE, LIVE_WINDOW_SIZE,
+            LIVE_STEP_SIZE, LIVE_FORECAST_HORIZON,
+        )
+        data = {}
+        try:
+            data = request.get_json(force=True) or {}
+        except Exception:
+            data = {}
+        interface = data.get("interface") or LIVE_DEFAULT_INTERFACE
+        window_size = int(data.get("window_size", LIVE_WINDOW_SIZE))
+        step_size = int(data.get("step_size", LIVE_STEP_SIZE))
+        forecast_horizon = int(data.get("forecast_horizon", LIVE_FORECAST_HORIZON))
+
+        mgr = LiveManager()
+        result = mgr.start(
+            interface=interface,
+            window_size=window_size,
+            step_size=step_size,
+            forecast_horizon=forecast_horizon,
+        )
+        status_code = 200 if "error" not in result else 400
+        return jsonify(result), status_code
+
+    @app.route("/api/live/stop", methods=["POST"])
+    def api_live_stop():
+        """Stop the current live capture session."""
+        from netwatch.live.manager import LiveManager
+        return jsonify(LiveManager().stop())
+
+    @app.route("/api/live/status")
+    def api_live_status():
+        """Return current live session status (lightweight, polled by frontend)."""
+        from netwatch.live.manager import LiveManager
+        mgr = LiveManager()
+        if not mgr.is_active or mgr.state is None:
+            return jsonify({"active": False, "status": "stopped"})
+        return jsonify({"active": True, **mgr.state.to_status_dict()})
+
+    @app.route("/api/live/analysis/<analysis_id>")
+    def api_live_analysis_doc(analysis_id):
+        """Return the full live analysis document for a given analysis_id."""
+        from netwatch.live.manager import LiveManager
+        mgr = LiveManager()
+        if not mgr.is_active or mgr.state is None:
+            return jsonify({"error": "No active live session"}), 404
+        if mgr.state.analysis_id != analysis_id:
+            return jsonify({"error": "Analysis ID does not match active session"}), 404
+        doc = mgr.get_active_doc()
+        if doc is None:
+            return jsonify({"error": "Analysis document not yet available"}), 404
+        return jsonify(doc)
+
+    @app.route("/api/live/events")
+    def api_live_events():
+        """SSE stream of live dashboard updates (EventSource / text/event-stream)."""
+        import queue
+        from flask import Response, stream_with_context
+        from netwatch.live.manager import LiveManager
+
+        mgr = LiveManager()
+        if not mgr.is_active:
+            return jsonify({"error": "No active live session"}), 404
+
+        q: queue.Queue = queue.Queue(maxsize=256)
+
+        def on_event(event_type: str, data: dict):
+            try:
+                q.put_nowait((event_type, data))
+            except queue.Full:
+                pass
+
+        mgr.subscribe(on_event)
+
+        def generate():
+            try:
+                while True:
+                    try:
+                        event_type, data = q.get(timeout=15)
+                    except queue.Empty:
+                        # Keep-alive comment
+                        yield ": keepalive\n\n"
+                        continue
+                    yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+                    # If the manager stopped, send final event and close
+                    if not mgr.is_active:
+                        yield f"event: stopped\ndata: {json.dumps({'status': 'stopped'})}\n\n"
+                        break
+            finally:
+                mgr.unsubscribe(on_event)
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+
+    @app.route("/api/live/history")
+    def api_live_history():
+        """Return previous live session summaries."""
+        from netwatch.live.manager import LiveManager
+        return jsonify({"sessions": LiveManager().get_history()})
+
     # ── Serve React frontend (SPA + real static assets) ───────
     static_dir = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
     static_path = Path(static_dir)

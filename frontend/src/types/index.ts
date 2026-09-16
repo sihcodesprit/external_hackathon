@@ -588,3 +588,125 @@ export interface NetworkStateMetric {
   value: number;
   unit?: string;
 }
+
+// ── Live Monitoring (TShark) ───────────────────────────────
+
+export type LiveStatus =
+  | "stopped"
+  | "starting"
+  | "capturing"
+  | "warming_up"
+  | "analyzing"
+  | "ready"
+  | "stopping"
+  | "error";
+
+export interface LiveHealthInfo {
+  available: boolean;
+  path: string | null;
+  version: string | null;
+  error: string | null;
+}
+
+export interface LiveInterface {
+  name: string;
+  description: string;
+  addresses: string[];
+  is_up: boolean;
+}
+
+export interface LiveStartRequest {
+  interface: string;
+  window_size?: number;
+  step_size?: number;
+  forecast_horizon?: number;
+}
+
+export interface LiveStartResponse {
+  analysis_id: string;
+  status: string;
+  mode?: string;
+  interface?: string;
+  sensor?: string;
+  error?: string;
+}
+
+export interface LiveStatusResponse {
+  active: boolean;
+  status?: LiveStatus;
+  analysis_id?: string;
+  interface?: string;
+  started_at?: string;
+  uptime_seconds?: number;
+  packets?: number;
+  flows?: number;
+  hosts?: number;
+  states_count?: number;
+  current_risk?: number;
+  current_stage?: string;
+  world_model_status?: string;
+  last_error?: string;
+  window_size?: number;
+  step_size?: number;
+  forecast_horizon?: number;
+  tshark_stats?: Record<string, unknown>;
+}
+
+export interface LiveEvent {
+  event_type: string;
+  timestamp: string;
+  [key: string]: unknown;
+}
+
+export interface LiveTelemetry {
+  packets_per_second: number;
+  bytes_per_second: number;
+  events_per_second: number;
+  window_count: number;
+  current_window_events: number;
+}
+
+export interface LiveForecastPoint {
+  step: number;
+  risk: number;
+  stage: string;
+}
+
+export interface LiveAnalysisDoc {
+  analysis_id: string;
+  source: string;
+  interface: string;
+  started_at: string;
+  status: LiveStatus;
+  uptime_seconds: number;
+  telemetry: LiveTelemetry;
+  current: {
+    risk: number;
+    stage: string;
+    confidence: number;
+    features: Record<string, number>;
+  };
+  forecast_steps: LiveForecastPoint[];
+  risk_history: Array<{ timestamp: string; risk: number }>;
+  ensemble?: EnsembleResult;
+  counterfactual?: CounterfactualResult;
+  mitre_trajectory?: MitreTrajectoryStep[];
+  graph?: PredictGraph;
+  event_log: LiveEvent[];
+  states_count: number;
+  packets: number;
+  flows: number;
+  hosts: number;
+}
+
+export interface LiveSessionHistory {
+  analysis_id: string;
+  interface: string;
+  started_at: string;
+  stopped_at: string | null;
+  packets: number;
+  flows: number;
+  hosts: number;
+  states: number;
+  world_model_status: string;
+}

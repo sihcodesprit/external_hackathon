@@ -4,6 +4,7 @@ import { palette, motion } from "../../styles/theme";
 const nav = [
   { to: "/", label: "Overview", icon: "◈" },
   { to: "/analyze", label: "Analyze PCAP", icon: "⤒" },
+  { to: "/live", label: "Live Monitor", icon: "◉" },
   { to: "/network", label: "Network State", icon: "◉" },
   { to: "/forecast", label: "Forecast & Projection", icon: "⇉" },
   { to: "/attack-graph", label: "Attack Graph", icon: "⛨" },

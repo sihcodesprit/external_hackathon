@@ -25,6 +25,33 @@ services:
       retries: 3
       start_period: 30s
 
+  # ── Live capture (TShark) ────────────────────────────────
+  # Real-time packet capture requires raw sockets on the host network.
+  # Enable explicitly:  docker compose --profile live up live
+  live:
+    build:
+      context: .
+      target: live-capture
+    profiles:
+      - live
+    network_mode: host
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    volumes:
+      - .:/app
+      - dev-data:/app/data
+    environment:
+      - NW_WORLD_MODEL=linear
+      - NETWATCH_LIVE_ENABLED=1
+      - PORT=5000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/live/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   # ── Pipeline runner (one-shot) ──────────────────────────
   pipeline:
     build:

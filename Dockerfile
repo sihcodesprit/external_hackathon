@@ -30,6 +30,20 @@ RUN mkdir -p /app/data
 EXPOSE 5000
 CMD ["python", "run.py", "--no-pipeline"]
 
+# ── Live capture stage (TShark) ─────────────────────────────
+# Built on the development image so code hot-reload works; adds the only
+# sanctioned live packet-capture tool. Must run with NET_RAW / NET_ADMIN
+# capabilities (see docker-compose.yml `live` service).
+FROM development AS live-capture
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends tshark tcpdump && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV NETWATCH_LIVE_ENABLED=1
+
+CMD ["python", "run.py", "--no-pipeline"]
+
 # ── Production stage ────────────────────────────────────────
 FROM base AS production
 

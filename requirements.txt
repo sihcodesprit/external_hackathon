@@ -18,5 +18,8 @@ shap>=0.46
 # ── PCAP ingestion ────────────────────────────────────────
 scapy>=2.5   # enables upload of .pcap / .pcapng captures
 
+# ── Live monitoring ───────────────────────────────────────
+psutil>=5.9  # network interface discovery (optional; has fallbacks)
+
 # ── Testing ────────────────────────────────────────────────
 pytest>=7.4

@@ -141,6 +141,29 @@ ablation:
     - "temporal"
     - "model_vs_baselines"
 
+# ── Live Monitoring (TShark) ────────────────────────────────
+live:
+  enabled: true                      # master kill-switch
+  tshark_path: "tshark"             # path to tshark binary
+  output_format: "ek"               # ek (JSON per line) — the only supported format
+  bpf_filter: ""                    # optional BPF filter (e.g. "not port 22")
+  snaplen: 65535
+  promiscuous: true
+  default_interface: ""             # empty = auto-detect first suitable iface
+  window_size: 30                   # seconds per aggregation window
+  step_size: 5                      # seconds between window starts
+  forecast_horizon: 5               # K-step rollout for live model
+  max_event_queue: 10000
+  max_events_per_window: 8000
+  dashboard_update_interval: 1.0    # seconds between SSE push ticks
+  max_history_seconds: 600           # keep at most 10 min of raw history
+  model_type: "linear"              # linear (fast, in-memory) — always for live
+  min_states_for_model: 8           # states before first model fit
+  model_refit_interval: 3           # re-fit every N windows
+  max_state_history: 120            # cap for rolling state buffer
+  events_per_second_log: 1000       # log-level throttle for per-event logging
+  test_timeout: 30                  # seconds for health-test capture
+
 # ── Paths ────────────────────────────────────────────────────
 paths:
   data_dir: "data"
