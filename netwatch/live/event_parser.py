@@ -87,9 +87,16 @@ def parse_ek_line(parsed: dict) -> Optional[dict]:
     http_method = str(_first(http_l.get("http.request.method", "")) or "")
     http_host = str(_first(http_l.get("http.host", "")) or "")
     http_uri = str(_first(http_l.get("http.request.uri", "")) or "")
+    http_resp = _to_int(_first(http_l.get("http.response.code")), None)
 
-    # TLS
+    # TLS metadata (metadata only — no payload inspection)
     tls_handshake = _to_int(_first(tls_l.get("tls.handshake.type")), None)
+    tls_version = str(_first(tls_l.get("tls.handshake.version",
+                                       tls_l.get("tls.record.version", ""))) or "")
+    tls_sni = str(_first(tls_l.get("tls.handshake.extensions_server_name", "")) or "")
+
+    # TCP retransmission (optional analytics field, when present on the wire)
+    tcp_retransmission = bool(_first(tcp_l.get("tcp.analysis.retransmission"), None) is not None)
 
     protocol = _resolve_protocol(proto_num, protocols, src_port, dst_port)
 
@@ -113,7 +120,11 @@ def parse_ek_line(parsed: dict) -> Optional[dict]:
         "http_method": http_method,
         "http_host": http_host,
         "http_uri": http_uri,
+        "http_response_code": http_resp,
         "tls_handshake_type": tls_handshake,
+        "tls_version": tls_version,
+        "tls_server_name": tls_sni,
+        "tcp_retransmission": tcp_retransmission,
         "raw_protocols": protocols,
         "source": "tshark",
     }

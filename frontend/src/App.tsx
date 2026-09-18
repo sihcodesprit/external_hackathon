@@ -6,6 +6,7 @@ import { PageLoader } from "./components/ui/displays";
 const Overview = lazy(() => import("./pages/Overview"));
 const AnalyzePCAP = lazy(() => import("./pages/AnalyzePCAP"));
 const LiveMonitor = lazy(() => import("./pages/LiveMonitor"));
+const UrlMonitor = lazy(() => import("./pages/UrlMonitor"));
 const NetworkState = lazy(() => import("./pages/NetworkState"));
 const Forecast = lazy(() => import("./pages/Forecast"));
 const AttackGraph = lazy(() => import("./pages/AttackGraph"));
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/" element={<Overview />} />
           <Route path="/analyze" element={<AnalyzePCAP />} />
           <Route path="/live" element={<LiveMonitor />} />
+          <Route path="/url-monitor" element={<UrlMonitor />} />
           <Route path="/network" element={<NetworkState />} />
           <Route path="/forecast" element={<Forecast />} />
           <Route path="/attack-graph" element={<AttackGraph />} />

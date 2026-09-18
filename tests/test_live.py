@@ -364,3 +364,247 @@ def test_api_live_start_stop(client, live_manager_with_fake):
 def test_api_live_events_requires_session(client):
     resp = client.get("/api/live/events")
     assert resp.status_code == 404
+
+
+# ── URL target resolution & validation ─────────────────────────
+def test_url_parse_valid_custom_port():
+    from netwatch.live.url_target import UrlTarget
+    t = UrlTarget("https://api.example.com:8443/login?x=1")
+    assert t.scheme == "https"
+    assert t.hostname == "api.example.com"
+    assert t.port == 8443
+    assert t.path == "/login"
+
+
+def test_url_parse_default_ports():
+    from netwatch.live.url_target import UrlTarget
+    assert UrlTarget("https://example.com").port == 443
+    assert UrlTarget("http://example.com").port == 80
+    assert UrlTarget("https://example.com").protocol == "HTTPS"
+
+
+def test_url_rejects_unsafe_schemes_and_hosts():
+    from netwatch.live.url_target import UrlTarget
+    for bad in ("javascript:alert(1)", "file:///etc/passwd", "data:text/html,x",
+                "https://localhost", "http://127.0.0.1", "http://10.0.0.5",
+                "ftp://example.com", "https://", "rm -rf /"):
+        with pytest.raises(ValueError):
+            UrlTarget(bad)
+
+
+def test_url_private_hosts_allowed_when_configured():
+    from netwatch.live.url_target import UrlTarget
+    t = UrlTarget("http://10.0.0.5:8080", allow_private_hosts=True)
+    assert t.hostname == "10.0.0.5"
+    assert t.port == 8080
+
+
+def test_resolve_hostname_mocked(monkeypatch):
+    import socket
+    from netwatch.live import url_target as ut
+
+    def fake_getaddrinfo(host, port, family, socktype):
+        if family == socket.AF_INET:
+            return [(family, socktype, 6, "", ("93.184.216.34", 0)),
+                    (family, socktype, 6, "", ("93.184.216.35", 0))]
+        return [(family, socktype, 6, "", ("2606:2800:220:1:248:1893:25c8:1946", 0, 0, 0))]
+
+    monkeypatch.setattr(ut.socket, "getaddrinfo", fake_getaddrinfo)
+    ips = ut.resolve_hostname("example.com")
+    assert "93.184.216.34" in ips
+    assert "93.184.216.35" in ips
+    assert any(":" in ip for ip in ips)
+
+
+def test_build_bpf_filter():
+    from netwatch.live.url_target import build_bpf_filter
+    assert build_bpf_filter([], 443) == ""
+    assert build_bpf_filter(["1.2.3.4"], 443) == "host 1.2.3.4 and port 443"
+    multi = build_bpf_filter(["1.2.3.4", "5.6.7.8"], 8443)
+    assert multi == "(host 1.2.3.4 or host 5.6.7.8) and port 8443"
+
+
+def test_url_target_matches_and_direction():
+    from netwatch.live.url_target import UrlTarget
+    t = UrlTarget("https://example.com")
+    t.current_ips = ["93.184.216.34"]
+    outbound = {"src_ip": "192.168.1.10", "dst_ip": "93.184.216.34",
+                "src_port": 50000, "dst_port": 443, "protocol": "TCP"}
+    inbound = {"src_ip": "93.184.216.34", "dst_ip": "192.168.1.10",
+               "src_port": 443, "dst_port": 50000, "protocol": "TCP"}
+    unrelated = {"src_ip": "192.168.1.10", "dst_ip": "8.8.8.8",
+                 "src_port": 50000, "dst_port": 443, "protocol": "TCP"}
+    assert t.matches(outbound) is True
+    assert t.matches(inbound) is True
+    assert t.matches(unrelated) is False
+    assert t.classify_direction(outbound) == "outbound"
+    assert t.classify_direction(inbound) == "inbound"
+
+
+# ── URL metrics ────────────────────────────────────────────────
+def test_compute_url_metrics_real_events():
+    from netwatch.live.url_target import UrlTarget
+    from netwatch.live.url_monitor import compute_url_metrics
+
+    t = UrlTarget("https://example.com")
+    t.current_ips = ["93.184.216.34"]
+    t.resolution_count = 2
+    base = "2026-09-16T00:00:0"
+    events = [
+        {"src_ip": "192.168.1.10", "dst_ip": "93.184.216.34", "src_port": 50000,
+         "dst_port": 443, "protocol": "TCP", "packet_length": 74, "tcp_flags": "S",
+         "timestamp": base + "0Z"},
+        {"src_ip": "93.184.216.34", "dst_ip": "192.168.1.10", "src_port": 443,
+         "dst_port": 50000, "protocol": "TCP", "packet_length": 74, "tcp_flags": "SA",
+         "timestamp": base + "1Z"},
+        {"src_ip": "192.168.1.10", "dst_ip": "93.184.216.34", "src_port": 50000,
+         "dst_port": 443, "protocol": "TCP", "packet_length": 300, "tcp_flags": "PA",
+         "timestamp": base + "2Z", "tls_handshake_type": 1, "tls_server_name": "example.com"},
+        {"src_ip": "93.184.216.34", "dst_ip": "192.168.1.10", "src_port": 443,
+         "dst_port": 50000, "protocol": "TCP", "packet_length": 1200, "tcp_flags": "A",
+         "timestamp": base + "3Z", "tcp_retransmission": True},
+    ]
+    m = compute_url_metrics(events, t, window_seconds=4)
+    assert m["packets"] == 4
+    assert m["bytes"] == 74 + 74 + 300 + 1200
+    assert m["outbound_packets"] == 2
+    assert m["inbound_packets"] == 2
+    assert m["syn_count"] == 1
+    assert m["syn_ack_count"] == 1
+    assert m["tls_connection_count"] == 1
+    assert m["retransmissions"] == 1
+    assert m["destination_ip_count"] == 1
+    assert m["dns_resolution_count"] == 2
+    assert m["upload_rate"] > 0 and m["download_rate"] > 0
+    feats = m["features"]
+    assert feats["target_packet_count"] == 4
+    assert feats["outbound_packet_count"] == 2
+    assert feats["TLS_connection_count"] == 1
+    assert "target_packet_size_entropy" in feats
+
+
+# ── LivePipeline in URL mode ───────────────────────────────────
+def test_live_pipeline_url_mode_filters_target_traffic():
+    from netwatch.live.live_pipeline import LivePipeline
+    from netwatch.live.live_state import LiveAnalysisState, LiveStatus
+    from netwatch.live.url_target import UrlTarget
+
+    target = UrlTarget("https://example.com")
+    target.current_ips = ["10.0.0.5"]
+
+    state = LiveAnalysisState(interface="eth0", window_size=30, step_size=5)
+    state.mode = "live_url"
+    state.status = LiveStatus.CAPTURING
+    state.started_at = "2026-09-16T00:00:00"
+    pipe = LivePipeline(state, target=target)
+
+    epoch = time.time()
+    ts = datetime.fromtimestamp(epoch, timezone.utc).isoformat().replace("+00:00", "Z")
+    matching = _raw_ek_packet()
+    matching["timestamp"] = ts
+    matching["layers"]["frame"]["frame.time_epoch"] = str(epoch)
+    non_matching = _raw_ek_packet(**{"ip.ip.dst": "10.0.0.99"})
+    non_matching["timestamp"] = ts
+    non_matching["layers"]["frame"]["frame.time_epoch"] = str(epoch)
+
+    for _ in range(3):
+        pipe.process_event(matching)
+    pipe.process_event(non_matching)
+
+    assert state.events_received == 4
+    assert state.packets == 3
+    assert state.url_packets == 3
+    assert state.url_flows == 1
+
+    pipe.force_window()
+    assert state.states_count == 1
+    feats = state.network_state.get("features", {})
+    assert "target_packet_count" in feats
+    assert state.url_metrics_last.get("packets") == 3
+    assert any(e["type"] == "flow" for e in state.timeline)
+
+
+# ── LiveManager URL session ────────────────────────────────────
+def test_manager_start_url_with_fake(live_manager_with_fake, monkeypatch):
+    from netwatch.live import url_target as ut
+    from netwatch.live.live_state import LiveStatus
+
+    monkeypatch.setattr(ut, "resolve_hostname", lambda host: ["93.184.216.34"])
+    mgr, fake = live_manager_with_fake
+
+    result = mgr.start_url("https://example.com", "eth0")
+    assert result["mode"] == "live_url"
+    assert result["hostname"] == "example.com"
+    assert result["analysis_id"]
+    assert fake.started is True
+    assert mgr.state.target["resolved_ips"] == ["93.184.216.34"]
+
+    # URL-target traffic is observed; unrelated traffic is ignored.
+    matching = _raw_ek_packet(**{"ip.ip.dst": "93.184.216.34"})
+    epoch = time.time()
+    matching["timestamp"] = datetime.fromtimestamp(epoch, timezone.utc).isoformat().replace("+00:00", "Z")
+    matching["layers"]["frame"]["frame.time_epoch"] = str(epoch)
+    fake.feed(matching)
+    fake.feed(_raw_ek_packet(**{"ip.ip.dst": "8.8.8.8"}))
+    assert mgr.state.packets == 1
+    assert mgr.state.status != LiveStatus.ERROR
+
+    stop_res = mgr.stop()
+    assert stop_res["status"] == "stopped"
+    assert stop_res["mode"] == "live_url"
+
+
+def test_manager_start_url_invalid_returns_error(live_manager_with_fake):
+    mgr, _ = live_manager_with_fake
+    res = mgr.start_url("file:///etc/passwd", "eth0")
+    assert "error" in res
+
+
+def test_manager_start_url_unresolvable(monkeypatch, live_manager_with_fake):
+    from netwatch.live import url_target as ut
+    monkeypatch.setattr(ut, "resolve_hostname", lambda host: [])
+    mgr, _ = live_manager_with_fake
+    res = mgr.start_url("https://nonexistent.invalid", "eth0")
+    assert "error" in res
+
+
+# ── URL Monitor API ────────────────────────────────────────────
+def test_api_live_url_start_requires_url(client, live_manager_with_fake):
+    resp = client.post("/api/live/url/start", json={"interface": "eth0"})
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_api_live_url_start_rejects_unsafe(client, live_manager_with_fake):
+    resp = client.post("/api/live/url/start",
+                       json={"url": "javascript:alert(1)", "interface": "eth0"})
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_api_live_url_start_status_stop(client, live_manager_with_fake, monkeypatch):
+    from netwatch.live import url_target as ut
+    monkeypatch.setattr(ut, "resolve_hostname", lambda host: ["93.184.216.34"])
+    mgr, fake = live_manager_with_fake
+
+    start = client.post("/api/live/url/start",
+                        json={"url": "https://example.com", "interface": "eth0"})
+    assert start.status_code == 200
+    body = start.get_json()
+    aid = body["analysis_id"]
+    assert body["mode"] == "live_url"
+    assert body["hostname"] == "example.com"
+
+    status = client.get(f"/api/live/url/status/{aid}")
+    assert status.status_code == 200
+    st = status.get_json()
+    assert st["mode"] == "live_url"
+    assert st["target"]["hostname"] == "example.com"
+    assert "traffic" in st and "risk" in st
+
+    missing = client.get("/api/live/url/status/does-not-exist")
+    assert missing.status_code == 404
+
+    stop = client.post("/api/live/url/stop", json={"analysis_id": aid})
+    assert stop.status_code == 200
+    assert stop.get_json()["status"] == "stopped"

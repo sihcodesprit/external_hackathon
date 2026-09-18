@@ -27,29 +27,41 @@ logger = logging.getLogger(__name__)
 class LivePipeline:
     """Processes live TShark events through the full Cyber World Model pipeline."""
 
-    def __init__(self, state: LiveAnalysisState):
+    def __init__(self, state: LiveAnalysisState, target=None):
         self.state = state
+        self.url_target = target
         self.window_mgr = WindowManager(
             window_size=state.window_size,
             step_size=state.step_size,
         )
         self.flow_tracker = FlowTracker()
         self._records_buffer: deque = deque(maxlen=8000)
+        self._url_events: deque = deque(maxlen=8000)
+        self._prev_url_metrics = None
+        self._url_flows_seen = set()
         self._pipeline = None
         self._world_model_ready = False
         self._window_count = 0
         self._states_since_last_fit = 0
+
+    def _target_match(self, parsed):
+        if self.url_target is None:
+            return True
+        return self.url_target.matches(parsed)
 
     def process_event(self, event: dict):
         """Process a single TShark event through the pipeline.
 
         The sensor delivers raw JSON (one object per line, EK control frames
         interleaved). parse_ek_line extracts the flat packet dict; control
-        frames and unparseable lines are ignored.
+        frames and unparseable lines are ignored. In URL mode only traffic
+        that involves the resolved target IP set/port enters the pipeline.
         """
         self.state.events_received += 1
         parsed = parse_ek_line(event)
         if parsed is None:
+            return
+        if not self._target_match(parsed):
             return
         pr = event_to_packet_record(parsed)
         if pr is None:
@@ -59,6 +71,8 @@ class LivePipeline:
         self._records_buffer.append(pr)
         self.state.packets += 1
         self.state.bytes_total += pr.bytes_sent
+        if self.url_target is not None:
+            self._track_url_event(parsed, pr)
 
     def check_window(self):
         """Check if a window step has elapsed and process if so."""
@@ -76,6 +90,9 @@ class LivePipeline:
         self.state.log_event("window", f"Window {self._window_count}: {len(window_records)} records")
 
         self._update_telemetry()
+
+        if self.url_target is not None:
+            self._compute_url_metrics(window_events)
 
         try:
             self._build_network_state(window_records)
@@ -98,9 +115,74 @@ class LivePipeline:
             window_records = self._extract_records(events)
             if window_records:
                 self._window_count += 1
+                if self.url_target is not None:
+                    self._compute_url_metrics(events)
                 self._build_network_state(window_records)
                 if self._world_model_ready:
                     self._run_analysis()
+
+    def _track_url_event(self, parsed: dict, pr: PacketRecord):
+        """Maintain URL-target telemetry and the observed timeline."""
+        self._url_events.append(parsed)
+        st = self.state
+        st.url_packets += 1
+        st.url_bytes += pr.bytes_sent
+        direction = self.url_target.classify_direction(parsed)
+        if direction == "outbound":
+            st.url_outbound_packets += 1
+            st.url_outbound_bytes += pr.bytes_sent
+        else:
+            st.url_inbound_packets += 1
+            st.url_inbound_bytes += pr.bytes_sent
+
+        flags = str(parsed.get("tcp_flags") or "").upper()
+        is_pure_syn = "S" in flags and "A" not in flags
+        if is_pure_syn:
+            st.url_syn_count += 1
+            st.append_timeline("connection", "TCP connection observed", {
+                "dst_ip": parsed.get("dst_ip"),
+                "dst_port": parsed.get("dst_port"),
+            })
+        if "R" in flags:
+            st.url_rst_count += 1
+        if "F" in flags:
+            st.url_fin_count += 1
+        if parsed.get("tcp_retransmission"):
+            st.url_retransmissions += 1
+        if parsed.get("tls_handshake_type") is not None:
+            st.url_tls_connections += 1
+            st.append_timeline("connection", "TLS handshake observed", {
+                "server_name": parsed.get("tls_server_name") or self.url_target.hostname,
+                "version": parsed.get("tls_version"),
+            })
+
+        flow_key = (parsed.get("src_ip"), parsed.get("dst_ip"),
+                    parsed.get("src_port"), parsed.get("dst_port"))
+        if flow_key not in self._url_flows_seen:
+            self._url_flows_seen.add(flow_key)
+            st.url_flows += 1
+            st.append_timeline("flow", "Flow updated", {
+                "src_ip": parsed.get("src_ip"),
+                "dst_ip": parsed.get("dst_ip"),
+                "dst_port": parsed.get("dst_port"),
+                "protocol": parsed.get("protocol"),
+            })
+
+    def _compute_url_metrics(self, window_events: list):
+        """Derive URL features from real target traffic for this window."""
+        from netwatch.live.url_monitor import compute_url_metrics
+
+        matched = [e for e in window_events if self._target_match(e)]
+        metrics = compute_url_metrics(
+            matched, self.url_target, self._prev_url_metrics,
+            window_seconds=float(self.state.window_size or 30),
+        )
+        self._prev_url_metrics = metrics
+        self.state.url_metrics_last = metrics
+        if matched:
+            self.state.append_timeline("traffic", "Outbound traffic detected" if
+                                       metrics["outbound_packets"] else "Inbound traffic detected",
+                                       {"packets": metrics["packets"], "bytes": metrics["bytes"]})
 
     def _extract_records(self, events: list) -> List[PacketRecord]:
         records = []
@@ -126,6 +208,7 @@ class LivePipeline:
             self.state.bytes_per_second = self.state.bytes_total / max(
                 time.time() - (datetime.fromisoformat(
                     self.state.started_at).timestamp() if self.state.started_at else time.time()), 1)
+        self.state.update_telemetry()
 
     def _build_network_state(self, records: List[PacketRecord]):
         """Build a NetworkState from a window of records using existing StateBuilder."""
@@ -147,6 +230,15 @@ class LivePipeline:
 
         latest_state = window_states[-1]
         self.state.states_count += 1
+
+        # Merge URL-target-specific features into the same NetworkState feature
+        # vector so the URL traffic flows through the one Cyber World Model.
+        if self.url_target is not None and self.state.url_metrics_last:
+            for k, v in self.state.url_metrics_last.get("features", {}).items():
+                latest_state.features[k] = float(v)
+            self.state.append_timeline("network_state",
+                                       "NetworkState updated",
+                                       {"states": self.state.states_count})
 
         # Maintain pipeline state history
         if self._pipeline is None:
@@ -338,6 +430,13 @@ class LivePipeline:
 
         # Assemble doc
         self._assemble_doc()
+        if self.url_target is not None:
+            self.state.append_timeline("risk", "NetworkState/risk updated", {
+                "current_risk": self.state.risk.get("current_risk", 0),
+            })
+            self.state.append_timeline("forecast", "World model forecast updated", {
+                "future_max_risk": self.state.risk.get("future_max_risk", 0),
+            })
         self.state.log_event("analysis", f"Analysis complete: risk={self.state.risk.get('current_risk', 0):.3f}")
 
     def _compute_risk_trend(self, future: list) -> str:
@@ -363,6 +462,9 @@ class LivePipeline:
         self.window_mgr.reset()
         self.flow_tracker.reset()
         self._records_buffer.clear()
+        self._url_events.clear()
+        self._url_flows_seen.clear()
+        self._prev_url_metrics = None
         self._pipeline = None
         self._world_model_ready = False
         self._window_count = 0

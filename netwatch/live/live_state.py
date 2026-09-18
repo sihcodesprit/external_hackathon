@@ -31,6 +31,8 @@ class LiveAnalysisState:
         self.status = LiveStatus.STOPPED
         self.mode = "live"
         self.sensor = "tshark"
+        self.source: Optional[Dict] = None
+        self.target: Optional[Dict] = None
         self.window_size = window_size
         self.step_size = step_size
         self.forecast_horizon = forecast_horizon
@@ -59,6 +61,8 @@ class LiveAnalysisState:
         self._host_history: deque = deque(maxlen=300)
         self._risk_history: deque = deque(maxlen=300)
         self._entropy_history: deque = deque(maxlen=300)
+        self._upload_history: deque = deque(maxlen=300)
+        self._download_history: deque = deque(maxlen=300)
 
         # Latest analysis results
         self.network_state = {}
@@ -73,6 +77,27 @@ class LiveAnalysisState:
 
         # Event log (bounded)
         self.event_log: deque = deque(maxlen=200)
+
+        # URL-target derived telemetry (mode === "live_url")
+        self.url_metrics_last: Dict = {}
+        self.url_packets = 0
+        self.url_bytes = 0
+        self.url_flows = 0
+        self.url_outbound_packets = 0
+        self.url_outbound_bytes = 0
+        self.url_inbound_packets = 0
+        self.url_inbound_bytes = 0
+        self.url_syn_count = 0
+        self.url_rst_count = 0
+        self.url_fin_count = 0
+        self.url_retransmissions = 0
+        self.url_tls_connections = 0
+        self.url_resolutions = 0
+        self.url_target_ip_changes = 0
+
+        # Ordered timeline of observed URL events (real observations only).
+        self.timeline: deque = deque(maxlen=400)
+        self.timeline_published = 0
 
         # Live document (canonical analysis format)
         self._doc: Optional[Dict] = None
@@ -89,6 +114,9 @@ class LiveAnalysisState:
         if self.risk:
             r = self.risk.get("current_risk", 0)
             self._risk_history.append((now, r))
+        if self.url_metrics_last and self.mode == "live_url":
+            self._upload_history.append((now, self.url_metrics_last.get("upload_rate", 0.0)))
+            self._download_history.append((now, self.url_metrics_last.get("download_rate", 0.0)))
 
     def log_event(self, event_type: str, message: str, data: Optional[dict] = None):
         entry = {
@@ -100,17 +128,56 @@ class LiveAnalysisState:
             entry["data"] = data
         self.event_log.appendleft(entry)
 
+    def append_timeline(self, event_type: str, message: str, data: Optional[dict] = None):
+        """Record a real observed URL event for the live timeline."""
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": event_type,
+            "message": message,
+        }
+        if data:
+            entry["data"] = data
+        self.timeline.append(entry)
+
+    def consume_unpublished_timeline(self) -> list:
+        """Return timeline entries not yet published over SSE and advance the cursor."""
+        pending = list(self.timeline)[self.timeline_published:]
+        self.timeline_published = len(self.timeline)
+        return pending
+
     def get_metrics_history(self) -> dict:
+        now = time.time()
         return {
             "packets_per_second": [(t, v) for t, v in self._pps_history],
             "bytes_per_second": [(t, v) for t, v in self._bps_history],
             "flows": [(t, v) for t, v in self._flow_history],
             "hosts": [(t, v) for t, v in self._host_history],
             "risk": [(t, v) for t, v in self._risk_history],
+            "upload_rate": [(t, v) for t, v in self._upload_history],
+            "download_rate": [(t, v) for t, v in self._download_history],
+            "timestamp": now,
+        }
+
+    def _url_telemetry_dict(self) -> dict:
+        return {
+            "packets": self.url_packets,
+            "bytes": self.url_bytes,
+            "flows": self.url_flows,
+            "outbound_packets": self.url_outbound_packets,
+            "outbound_bytes": self.url_outbound_bytes,
+            "inbound_packets": self.url_inbound_packets,
+            "inbound_bytes": self.url_inbound_bytes,
+            "syn_count": self.url_syn_count,
+            "rst_count": self.url_rst_count,
+            "fin_count": self.url_fin_count,
+            "retransmissions": self.url_retransmissions,
+            "tls_connections": self.url_tls_connections,
+            "resolutions": self.url_resolutions,
+            "target_ip_changes": self.url_target_ip_changes,
         }
 
     def to_status_dict(self) -> dict:
-        return {
+        d = {
             "analysis_id": self.analysis_id,
             "status": self.status,
             "interface": self.interface,
@@ -135,6 +202,16 @@ class LiveAnalysisState:
             "current_stage": self.stage.get("predicted_stage", "Unknown") if self.stage else "Unknown",
             "last_event": self.event_log[0] if self.event_log else None,
         }
+        if self.mode == "live_url":
+            d.update({
+                "source": self.source,
+                "target": self.target,
+                "url_telemetry": self._url_telemetry_dict(),
+                "url_metrics": self.url_metrics_last,
+                "timeline": list(self.timeline),
+                "world_model_status": self.world_model_status,
+            })
+        return d
 
     def to_analysis_dict(self) -> dict:
         """Return the canonical analysis document shape (matches build_document_from_pipeline)."""
@@ -188,4 +265,14 @@ class LiveAnalysisState:
                 "events_received": self.events_received,
                 "events_dropped": self.events_dropped,
             },
+            "metrics_history": self.get_metrics_history(),
         }
+        if self.mode == "live_url":
+            doc["source"] = self.source
+            doc["url_monitor"] = {
+                "target": self.target,
+                "telemetry": self._url_telemetry_dict(),
+                "url_metrics": self.url_metrics_last,
+                "timeline": list(self.timeline),
+            }
+        return doc

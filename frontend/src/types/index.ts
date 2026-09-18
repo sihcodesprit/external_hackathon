@@ -710,3 +710,107 @@ export interface LiveSessionHistory {
   states: number;
   world_model_status: string;
 }
+
+// ── URL Monitor (destination-observed live capture) ────────
+
+export interface UrlTargetInfo {
+  url: string;
+  hostname: string;
+  scheme: string;
+  port: number;
+  path: string;
+  protocol: string;
+  resolved_ips: string[];
+  previous_ips: string[];
+  ip_history: Array<{ resolved_at: number | null; ips: string[] }>;
+  resolution_count: number;
+}
+
+export interface UrlTraffic {
+  packets: number;
+  bytes: number;
+  flows: number;
+  packets_per_second: number;
+  bytes_per_second: number;
+  upload_rate: number;
+  download_rate: number;
+  outbound_packets: number;
+  outbound_bytes: number;
+  inbound_packets: number;
+  inbound_bytes: number;
+  syn_count: number;
+  rst_count: number;
+  fin_count: number;
+  retransmissions: number;
+  tls_connections: number;
+  resolutions: number;
+  target_ip_changes: number;
+  active_connections: number;
+}
+
+export interface UrlTimelineEvent {
+  timestamp: string;
+  type: string;
+  message: string;
+  data?: Record<string, unknown>;
+}
+
+export interface UrlRiskBlock {
+  current_risk?: number;
+  future_max_risk?: number;
+  risk_trend?: string;
+  confidence?: number;
+  forecast_horizon?: number;
+}
+
+export interface UrlForecastPoint {
+  step?: number;
+  risk?: number;
+  stage?: string;
+  confidence?: number;
+  stage_probability?: number;
+}
+
+export interface UrlStartRequest {
+  url: string;
+  interface: string;
+  window_size?: number;
+  step_size?: number;
+  forecast_horizon?: number;
+}
+
+export interface UrlStartResponse {
+  analysis_id: string;
+  mode: string;
+  status: string;
+  url?: string;
+  hostname?: string;
+  interface?: string;
+  sensor?: string;
+  target?: UrlTargetInfo;
+  error?: string;
+}
+
+export interface UrlStatusResponse {
+  analysis_id: string;
+  mode: string;
+  status: LiveStatus;
+  interface: string;
+  sensor?: string;
+  started_at?: string;
+  source?: { type: string; url: string; interface: string } | null;
+  target: UrlTargetInfo | null;
+  traffic: UrlTraffic;
+  url_metrics?: Record<string, unknown>;
+  timeline: UrlTimelineEvent[];
+  network_state?: { features?: Record<string, number>; timestamp?: string } | null;
+  risk: UrlRiskBlock;
+  forecast: { current?: Record<string, unknown>; future?: UrlForecastPoint[] } | null;
+  stage: Record<string, unknown>;
+  graph: PredictGraph | null;
+  mitre: MitreTrajectoryStep[] | null;
+  explainability: Record<string, unknown>;
+  counterfactual: Record<string, unknown>;
+  ensemble?: EnsembleResult | null;
+  world_model_status?: string;
+}

@@ -19,6 +19,9 @@ import type {
   ScenarioInfo,
   SystemInfo,
   TopologyData,
+  UrlStartRequest,
+  UrlStartResponse,
+  UrlStatusResponse,
   ZipInspect,
 } from "../types";
 
@@ -199,6 +202,23 @@ export const api = {
     request<{ sessions: LiveSessionHistory[] }>("/api/live/history").then((r) => r.sessions),
 
   liveEventsUrl: () => "/api/live/events",
+
+  // ── URL Monitor (destination-observed live capture) ──────
+
+  liveUrlStart: (cfg: UrlStartRequest) =>
+    request<UrlStartResponse>("/api/live/url/start", {
+      method: "POST",
+      body: JSON.stringify(cfg),
+    }),
+
+  liveUrlStatus: (analysisId: string) =>
+    request<UrlStatusResponse>(`/api/live/url/status/${encodeURIComponent(analysisId)}`),
+
+  liveUrlStop: (analysisId?: string) =>
+    request<{ status: string; analysis_id?: string; mode?: string; sensor_stats?: Record<string, unknown> }>(
+      "/api/live/url/stop",
+      { method: "POST", body: JSON.stringify({ analysis_id: analysisId }) },
+    ),
 };
 
 export function favoriteFeaturePipeline(res: { status?: string }): boolean {

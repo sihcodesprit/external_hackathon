@@ -1152,6 +1152,109 @@ def create_app():
             return jsonify({"active": False, "status": "stopped"})
         return jsonify({"active": True, **mgr.state.to_status_dict()})
 
+    # ── URL Monitor (destination-observed live capture) ─────────
+    def _url_traffic_payload(st) -> dict:
+        metrics = st.url_metrics_last or {}
+        return {
+            "packets": st.url_packets,
+            "bytes": st.url_bytes,
+            "flows": st.url_flows,
+            "packets_per_second": round(metrics.get("packets_per_second", 0.0), 2),
+            "bytes_per_second": round(metrics.get("bytes_per_second", 0.0), 2),
+            "upload_rate": round(metrics.get("upload_rate", 0.0), 2),
+            "download_rate": round(metrics.get("download_rate", 0.0), 2),
+            "outbound_packets": st.url_outbound_packets,
+            "outbound_bytes": st.url_outbound_bytes,
+            "inbound_packets": st.url_inbound_packets,
+            "inbound_bytes": st.url_inbound_bytes,
+            "syn_count": st.url_syn_count,
+            "rst_count": st.url_rst_count,
+            "fin_count": st.url_fin_count,
+            "retransmissions": st.url_retransmissions,
+            "tls_connections": st.url_tls_connections,
+            "resolutions": st.url_resolutions,
+            "target_ip_changes": st.url_target_ip_changes,
+            "active_connections": metrics.get("flows", 0),
+        }
+
+    @app.route("/api/live/url/start", methods=["POST"])
+    def api_live_url_start():
+        """Start a live URL-target monitoring session (DNS resolve + TShark)."""
+        from netwatch.live.manager import LiveManager
+        from netwatch.live.config import (
+            LIVE_DEFAULT_INTERFACE, LIVE_WINDOW_SIZE,
+            LIVE_STEP_SIZE, LIVE_FORECAST_HORIZON,
+            LIVE_URL_ALLOW_PRIVATE_HOSTS,
+        )
+        data = request.get_json(force=True, silent=True) or {}
+        url = data.get("url")
+        if not url or not isinstance(url, str):
+            return jsonify({"error": "A URL is required (e.g. https://example.com)"}), 400
+        interface = data.get("interface") or LIVE_DEFAULT_INTERFACE
+        if not interface:
+            return jsonify({"error": "An interface is required"}), 400
+        try:
+            window_size = max(1, int(data.get("window_size", LIVE_WINDOW_SIZE)))
+            step_size = max(1, int(data.get("step_size", LIVE_STEP_SIZE)))
+            forecast_horizon = max(1, int(data.get("forecast_horizon", LIVE_FORECAST_HORIZON)))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid window_size / step_size / forecast_horizon"}), 400
+
+        mgr = LiveManager()
+        result = mgr.start_url(
+            url=url, interface=interface, window_size=window_size,
+            step_size=step_size, forecast_horizon=forecast_horizon,
+            allow_private_hosts=bool(LIVE_URL_ALLOW_PRIVATE_HOSTS),
+        )
+        if "error" in result:
+            return jsonify(result), 400
+        return jsonify(result)
+
+    @app.route("/api/live/url/status/<analysis_id>")
+    def api_live_url_status(analysis_id):
+        """Return the full URL monitoring status for an active session."""
+        from netwatch.live.manager import LiveManager
+        mgr = LiveManager()
+        st = mgr.state
+        if not mgr.is_active or st is None or st.mode != "live_url":
+            return jsonify({"error": "No active URL monitoring session"}), 404
+        if st.analysis_id != analysis_id:
+            return jsonify({"error": "Analysis ID does not match active session"}), 404
+        return jsonify({
+            "analysis_id": st.analysis_id,
+            "mode": st.mode,
+            "status": st.status,
+            "interface": st.interface,
+            "sensor": st.sensor,
+            "started_at": st.started_at,
+            "source": st.source,
+            "target": st.target,
+            "traffic": _url_traffic_payload(st),
+            "url_metrics": st.url_metrics_last,
+            "timeline": list(st.timeline),
+            "network_state": st.network_state,
+            "risk": st.risk,
+            "forecast": st.forecast,
+            "stage": st.stage,
+            "graph": st.graph,
+            "mitre": st.mitre,
+            "explainability": st.explainability,
+            "counterfactual": st.counterfactual,
+            "ensemble": st.ensemble,
+            "world_model_status": st.world_model_status,
+        })
+
+    @app.route("/api/live/url/stop", methods=["POST"])
+    def api_live_url_stop():
+        """Stop a URL monitoring session cleanly (no orphan TShark processes)."""
+        from netwatch.live.manager import LiveManager
+        data = request.get_json(force=True, silent=True) or {}
+        analysis_id = data.get("analysis_id")
+        mgr = LiveManager()
+        if analysis_id and mgr.state is not None and mgr.state.analysis_id != analysis_id:
+            return jsonify({"error": "Analysis ID does not match active session"}), 404
+        return jsonify(mgr.stop())
+
     @app.route("/api/live/analysis/<analysis_id>")
     def api_live_analysis_doc(analysis_id):
         """Return the full live analysis document for a given analysis_id."""
