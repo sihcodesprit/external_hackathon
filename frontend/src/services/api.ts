@@ -17,6 +17,7 @@ import type {
   ModelTestRunJob,
   ReportDocument,
   ScenarioInfo,
+  SystemDependencies,
   SystemInfo,
   TopologyData,
   UrlStartRequest,
@@ -219,6 +220,9 @@ export const api = {
       "/api/live/url/stop",
       { method: "POST", body: JSON.stringify({ analysis_id: analysisId }) },
     ),
+
+  // ── System / Dependencies ──────────────────────────────────
+  systemDependencies: () => request<SystemDependencies>("/api/system/dependencies"),
 };
 
 export function favoriteFeaturePipeline(res: { status?: string }): boolean {

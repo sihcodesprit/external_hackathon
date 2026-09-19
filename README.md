@@ -30,261 +30,315 @@ states via `rollout()`. It is fully **offline** — no cloud or external inferen
 
 ---
 
-## How it works (end-to-end)
+## 🚀 Quick Start
+
+### One-Command Setup (Recommended)
+
+The project includes a **cross-platform bootstrap system** that automatically
+installs Python dependencies, discovers/installs TShark, and configures everything.
+
+```bash
+# Linux / macOS
+git clone <REPO_URL>
+cd <PROJECT>
+chmod +x scripts/setup_linux.sh
+./scripts/setup_linux.sh
+
+# Windows PowerShell
+git clone <REPO_URL>
+cd <PROJECT>
+.\scripts\setup_windows.ps1
+
+# Cross-platform (Python)
+python scripts/setup.py
+```
+
+### Verify Installation
+
+```bash
+python scripts/check_tshark.py
+```
+
+Expected when TShark is ready:
 
 ```
-Network traffic (synthetic / PCAP / CSV / flow records)
-        │
-        ▼
-Flow + packet + temporal features  ──►  NetworkState S_t
-        │
-        ▼
-Temporal sequences  [S(t-4) … S(t)]  ──►  S(t+1)
-        │
-        ▼
-LSTM World Model  P(S_{t+1} | S_t)
-        │
-        ▼
-K-step rollout  S_{t+1} → S_{t+2} → … → S_{t+K}
-        │
-        ▼
-Per step:  attack probability · MITRE stage · confidence · top features
-        │
-        ▼
-Predictive attack graph (current + predicted states)
-        │
-        ▼
-Counterfactual simulation:
-   no_action  block_source  block_dest_port  isolate_host  terminate_flow  restrict_path
-        │            │               │               │              │             │
-        └────────────┴───────────────┴───────────────┴──────────────┴─────────────┘
-                                    │
-                                    ▼
-         compare predicted futures → recommend the action that minimises future risk
-                                    │
-                                    ▼
-                            SHAP / XAI explanation
-                                    │
-                                    ▼
-                              Flask dashboard
+========================================
+CYBER WORLD MODEL ENVIRONMENT CHECK
+========================================
+
+Operating System:
+  Linux 6.8.0 (x86_64)
+
+Python:
+  3.11.9 (CPython)
+
+TShark:
+  AVAILABLE
+
+TShark Path:
+  /usr/bin/tshark
+
+TShark Version:
+  4.2.3
+
+Live Capture:
+  READY
+
+Available Interfaces:
+  ● eth0 (192.168.1.42)
+  ● wlan0 (10.0.0.5)
+
+========================================
+SETUP COMPLETE
+========================================
 ```
+
+### Run the Dashboard
+
+```bash
+python run.py
+# Open http://localhost:5000
+```
+
+| Page | URL | Purpose |
+|------|-----|---------|
+| **Live Monitor** | `/live` | Real-time packet capture → World Model forecasting |
+| **URL Monitor** | `/url-monitor` | Enter URL → DNS resolve → observe destination traffic |
+| **System** | `/system` | Runtime, models, artifacts, **TShark dependency status** |
+| Dashboard | `/dashboard` | Risk overview + network topology |
+| Forecast | `/forecast` | K-step risk timeline |
+| Attack Graph | `/graph` | Predictive attack graph (current + predicted) |
+| Counterfactual | `/counterfactual` | What-if defence simulation |
+| Stages | `/stages` | MITRE ATT&CK progression |
+| Explainability | `/explainability` | SHAP / top features |
+| Evaluation | `/evaluation` | World Model vs baselines |
+| Scenarios | `/scenarios` | Synthetic demos |
+| Upload | `/upload` | PCAP/CSV upload + analysis |
 
 ---
 
-## Project structure
+## 📁 Project Structure
 
 ```
 project/
 ├── netwatch/                     ← Counterfactual Cyber World Model
-│   ├── config.py                 ← shared config, feature list, hyperparameters
-│   ├── pipeline.py               ← end-to-end orchestrator
-│   ├── features/                 ← network_state, sequences, flow/packet/temporal
-│   │   ├── network_state.py      ← NetworkState dataclass and StateBuilder
-│   │   ├── feature_registry.py   ← centralized feature configuration
-│   │   ├── packet_features.py    ← packet-level features (TTL, payload, window, IAT)
-│   │   ├── flow_features.py      ← bidirectional flow features
-│   │   ├── tcp_features.py       ← TCP handshake / ghost ratio features
-│   │   ├── entropy_features.py   ← Shannon entropy + temporal trajectories
-│   │   ├── temporal_features.py  ← IAT stats, jitter, periodicity, burstiness, FFT
-│   │   ├── graph_features.py     ← dynamic network graph topology
-│   │   ├── trajectory_features.py← temporal derivatives (delta, acceleration)
-│   │   ├── baseline_features.py  ← benign baseline deviation (z-score, percentile)
-│   │   └── sequences.py          ← temporal sequence dataset construction
-│   ├── models/                   ← base_model, lstm_world_model, linear_world_model,
-│   │                                 trainer, baselines/
-│   ├── forecasting/              ← attack_forecaster, stage_predictor, confidence
-│   ├── counterfactual/           ← simulator, defensive_actions
-│   ├── explainability/           ← shap_explainer
-│   ├── mitre/                    ← attack_mapper
-│   ├── graph/                    ← predictive_attack_graph
-│   ├── evaluation/               ← metrics, baselines, unseen_attack, ablation
-│   ├── ingestion/                ← parser, synthetic, datasets/adapters, dataset_levels
-│   └── dashboard/                ← 9-page Flask dashboard
-├── tests/                        ← pytest (netwatch core + e2e)
-├── data/                         ← runtime artifacts (gitignored)
+│   ├── config.py                 ← Shared config, feature list, hyperparameters
+│   ├── pipeline.py               ← End-to-end orchestrator
+│   ├── features/                 ← NetworkState, sequences, flow/packet/temporal
+│   ├── models/                   ← LSTM/Linear World Model, trainer, baselines
+│   ├── forecasting/              ← Attack forecaster, stage predictor, confidence
+│   ├── counterfactual/           ← Simulator, defensive actions
+│   ├── explainability/           ← SHAP explainer
+│   ├── mitre/                    ← MITRE ATT&CK mapper
+│   ├── graph/                    ← Predictive attack graph
+│   ├── evaluation/               ← Metrics, baselines, unseen attack, ablation
+│   ├── ingestion/                ← Parser, synthetic, dataset adapters
+│   ├── live/                     ← **TShark live monitoring pipeline**
+│   │   ├── tshark_locator.py     ← Single source of truth: discovery/version/capabilities
+│   │   ├── tshark_command.py     ← Safe TShark command builder
+│   │   ├── tshark_runner.py      ← Runner interface (Real/Mock for tests)
+│   │   ├── tshark_sensor.py      ← Subprocess manager
+│   │   ├── health.py             ← Health check (compat layer over locator)
+│   │   ├── interface.py          ← Cross-platform interface discovery
+│   │   ├── url_monitor.py        ← URL-target traffic metrics
+│   │   ├── url_target.py         ← URL resolution + BPF filter building
+│   │   ├── live_pipeline.py      ← Window manager + flow tracker + state builder
+│   │   └── manager.py            ← Session control + SSE
+│   └── dashboard/                ← 14-page Flask dashboard + React SPA
+├── scripts/                      ← **Bootstrap & verification**
+│   ├── setup.py                  ← Cross-platform orchestrator
+│   ├── setup_windows.ps1         ← Windows one-command setup
+│   ├── setup_linux.sh            ← Linux/macOS one-command setup
+│   ├── check_tshark.py           ← Full environment verification
+│   ├── find_tshark.py            ← Print TShark path
+│   ├── configure_tshark.py       ← Write TSHARK_PATH to .env
+│   └── _setup_common.py          ← Shared utilities
+├── tests/                        ← Pytest (unit + integration)
+├── docs/                         ← Architecture, requirements, troubleshooting
+├── frontend/                     ← React + TypeScript + Vite SPA
+├── data/                         ← Runtime artifacts (gitignored)
 ├── configs/                      ← config.yaml
-├── docs/                         ← ARCHITECTURE.md, EXPERIMENTS.md, MODEL_CARD.md
-├── run.py                        ← entry point
+├── run.py                        ← Entry point (loads .env, starts server)
 ├── forecast.py                   ← CSV/JSONL forecast CLI
 ├── forecast_pcap.py              ← PCAP forecast CLI
-├── requirements.txt
-└── (audit docs) PROJECT_AUDIT.md, REMOVED_COMPONENTS.md, FINAL_AUDIT.md
+├── requirements.txt              ← Python dependencies only
+├── .env.example                  ← Environment template
+├── .gitignore
+├── Dockerfile                    ← Multi-stage (dev / live-capture / prod)
+├── docker-compose.yml            ← Dev / live / pipeline / prod profiles
+├── pyproject.toml                ← Build + pytest + ruff + mypy config
+└── README.md                     ← This file
 ```
 
 ---
 
-## Quick Start
+## 🔧 Configuration
 
-### Prerequisites
+All configuration in `configs/config.yaml` (see file for full list). Key sections:
 
-- Python 3.10+
-- `torch` (CPU build is fine), `scikit-learn`, `flask`, `shap`, `numpy`, `pyyaml`
+- **Ingestion**: PCAP/CSV/JSONL modes, chunk sizes
+- **Feature Engineering**: Window/step/sequence, 11 feature group toggles
+- **World Model**: LSTM/Linear, hidden size, layers, dropout, LR, epochs
+- **Forecasting**: K-step horizon, escalation threshold, confidence weights
+- **Counterfactual**: 6 defensive actions, effect window, recommendation metric
+- **Live Monitoring (TShark)**: All `live.*` settings (see below)
 
-### Setup
+### Environment Variables (`.env`)
+
+Copy `.env.example` to `.env` and customise. The `run.py` entry point loads it.
 
 ```bash
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate    # macOS/Linux
+# TShark / Live Monitoring
+TSHARK_PATH=                    # Explicit path (empty = auto-discover)
+NETWATCH_LIVE_ENABLED=true      # Master kill-switch
+LIVE_WINDOW_SIZE=30             # Seconds per aggregation window
+LIVE_STEP_SIZE=5                # Seconds between window starts
+LIVE_FORECAST_HORIZON=5         # K-step rollout
 
-pip install -r requirements.txt
-copy .env.example .env         # Windows  (optional)
+# Flask
+FLASK_SECRET_KEY=change-me
+PORT=5000
 ```
 
-### Run
+### TShark Executable Resolution Priority
+
+1. `TSHARK_PATH` env var (explicit)
+2. `NETWATCH_TSHARK_PATH` env var (legacy)
+3. `tshark` on `PATH`
+4. Platform candidates (Program Files, `/usr/bin`, `/usr/local/bin`, Homebrew, etc.)
+5. Setup script installation
+
+---
+
+## 🐳 Docker
+
+### Development (no live capture)
+```bash
+docker compose up dev
+# http://localhost:5000
+```
+
+### Live Capture (Linux host only)
+```bash
+docker compose --profile live up live
+# Uses host network + NET_RAW/NET_ADMIN caps
+```
+
+### Production
+```bash
+docker compose up prod
+# Gunicorn, non-root user, healthchecks
+```
+
+**Note:** On Docker Desktop (macOS/Windows), `network_mode: host` doesn't expose host interfaces. Run natively or in a Linux VM for live capture.
+
+---
+
+## 🧪 Testing
 
 ```bash
-python run.py                  # train World Model + start dashboard
-# Open http://localhost:5000
+# Unit tests (no TShark required — uses MockTsharkRunner)
+python -m pytest tests/ -v -m "not integration and not tshark_integration"
+
+# TShark integration tests (requires TShark + capture permission)
+TSHARK_INTEGRATION_TESTS=1 python -m pytest tests/ -m tshark_integration -v
+
+# Lint & type check
+ruff check netwatch scripts tests
+mypy --ignore-missing-imports netwatch/live/tshark_locator.py netwatch/live/tshark_command.py netwatch/live/tshark_runner.py
 ```
 
-Other entry-point options:
+### CI/CD (GitHub Actions)
 
+- **Unit tests**: Ubuntu, Python 3.10/3.11/3.12
+- **Lint**: `ruff` + `mypy`
+- **Frontend**: `npm run build`
+- **Docker**: builds `dev`, `live-capture`, `prod` targets
+- **TShark integration**: runs only when `TSHARK_INTEGRATION_TESTS` secret is set
+
+---
+
+## 📚 Documentation
+
+| File | Description |
+|------|-------------|
+| `docs/ARCHITECTURE.md` | Technical architecture |
+| `docs/EXPERIMENTS.md` | Evaluation methodology & results |
+| `docs/MODEL_CARD.md` | Model details, capabilities, limitations |
+| `docs/system-requirements.md` | **System-level dependencies (TShark, permissions, etc.)** |
+| `docs/troubleshooting.md` | Common issues & solutions |
+| `docs/live-tshark-monitoring.md` | Live pipeline architecture & API |
+| `docs/clean-machine-checklist.md` | Fresh-machine verification steps |
+
+---
+
+## 🔒 Security
+
+- **No `shell=True`** — all subprocess calls use list arguments
+- **Interface validation** — restricted to `[A-Za-z0-9_.-]`
+- **BPF filter validation** — internally generated, length-capped
+- **URL validation** — only `http`/`https`; hostname regex; SSRF protection
+- **No secrets in repo** — `.env` gitignored, `.env.example` has placeholders
+- **Capture privileges documented separately** — app runs as normal user
+
+---
+
+## 📦 Requirements
+
+### Python (≥ 3.10)
+All in `requirements.txt`:
+```
+flask>=3.0,<4
+gunicorn>=21.0
+werkzeug>=3.0
+numpy>=1.26
+scikit-learn>=1.4
+torch>=2.1
+pyyaml>=6.0
+shap>=0.46
+scapy>=2.5      # PCAP ingestion
+psutil>=5.9     # Interface discovery (optional)
+pytest>=7.4     # Testing
+```
+
+### System (Live Capture Only)
+| Platform | Package |
+|----------|---------|
+| Debian/Ubuntu/Kali | `tshark` |
+| Fedora/RHEL | `wireshark-cli` |
+| Arch | `wireshark-cli` |
+| openSUSE | `wireshark` |
+| macOS | `wireshark` (Homebrew) |
+| Windows | `WiresharkFoundation.Wireshark` (winget) |
+
+---
+
+## 🛠️ Development
+
+### Frontend
 ```bash
-python run.py --pipeline-only   # train + evaluate + forecast, print report, exit
-python run.py --no-pipeline     # dashboard only (trains lazily on first request)
-python run.py --port 8080
+cd frontend
+npm install
+npm run dev      # Dev server (HMR) at http://localhost:5173
+npm run build    # Production build to frontend/dist/
 ```
 
-### Forecast from files
+The Flask app serves `frontend/dist/` in production.
 
-```bash
-# From CSV/JSONL flow records
-python forecast.py --input data.csv --horizon 5
-
-# From PCAP packet capture
-python forecast_pcap.py --input capture.pcap --horizon 5
-```
+### Adding Tests
+- Unit tests: `tests/test_*.py` (no TShark, use `MockTsharkRunner`)
+- Integration tests: mark with `@pytest.mark.tshark_integration`
 
 ---
 
-## Dashboard pages (9)
-
-| Page | Route | Content |
-|---|---|---|
-| Dashboard | `/dashboard` | Current risk + stage + latest forecast summary |
-| 10-Min Radar | `/radar` | Future risk timeline |
-| Attack Graph | `/graph` | Predictive attack graph (current + predicted) |
-| Counterfactual | `/counterfactual` | What-if defence simulation + recommendation |
-| Stages | `/stages` | Attack stage timeline + MITRE trajectory |
-| Explainability | `/explainability` | SHAP / top contributing features |
-| Evaluation | `/evaluation` | World Model vs baseline metrics |
-| Scenarios | `/scenarios` | Ad-hoc scenario / data explorer |
-| **Upload / Demo** | `/upload` / `/demo` | **PCAP/CSV upload, demo mode** |
-
----
-
-## Features
-
-### Network State Representation (S_t)
-- **Traffic features**: packet_rate, byte_rate, flow_rate, connection_rate, total_packets, total_bytes, average_packet_size, packet_size_variance, flow_duration_mean
-- **Packet features**: TTL, TTL variance, TCP window, window variance, IP fragmentation, payload size/distribution, packet size/distribution, IAT mean/variance/max, TCP retransmissions, TCP flags, protocol, ports
-- **Flow features**: bidirectional packet/byte ratios, forward/backward packets/bytes, IAT stats
-- **TCP handshake features**: SYN/SYN-ACK/ACK/RST/FIN counts, ratios (syn_ack_ratio, half_open_ratio), temporal derivatives
-- **Entropy features**: Shannon entropy for ports, protocols, IPs, payload, packet size, TCP flags + temporal trajectories (ΔH, Δ²H)
-- **Temporal features**: IAT mean/std/variance/CV/min/max, autocorrelation, periodicity, burstiness, FFT (optional)
-- **Graph features**: node/edge count, density, degree stats, clustering, centrality, new edges/destinations, temporal deltas
-- **Markov features**: TCP state transition probabilities
-- **Trajectory features**: delta/acceleration for key variables
-- **Baseline deviation**: z-scores, percentiles, absolute deviations from benign baseline
-
-### World Model
-- **Architecture**: LSTM (configurable: linear, transformer future)
-- **Input**: sequence_length × n_features
-- **Output**: predicted next state vector
-- **K-step rollout**: recursive future state simulation
-
-### Forecasting
-- **Attack risk**: learned risk head (logistic regression) on predicted states
-- **MITRE ATT&CK stage**: heuristic + classifier fallback
-- **Confidence**: magnitude + stage prob + attack prob
-- **Predictive attack graph**: nodes (stages) + edges (transitions)
-
-### Counterfactual Simulation
-- **Actions**: no_action, block_source, block_dest_port, isolate_host, terminate_flow, restrict_path
-- **Mechanism**: modify state → rollout → risk head → compare trajectories
-- **Recommendation**: minimizes predicted peak risk
-
-### Explainability
-- **SHAP**: on learned risk head
-- **Fallback**: feature magnitude
-- **Temporal**: when features changed
-
-### Evaluation
-- **Continuous**: MSE, RMSE, MAE, cosine similarity
-- **Classification**: accuracy, precision, recall, F1, ROC-AUC
-- **Forecasting**: Brier score, calibration, precision@horizon
-- **Counterfactual**: risk reduction, stability, action ranking
-- **Baselines**: Logistic Regression, Random Forest, Gradient Boosting
-- **Unseen attack**: generalization to held-out stages
-- **Ablation studies**: feature groups, graph, entropy, temporal, model vs baselines
-
----
-
-## CLI Commands
-
-### Training & Dashboard
-```bash
-python run.py                      # train + dashboard
-python run.py --pipeline-only      # train + evaluate + forecast, exit
-python run.py --no-pipeline        # dashboard only
-python run.py --port 8080          # custom port
-```
-
-### Forecasting
-```bash
-# From CSV/JSONL
-python forecast.py --input data.csv --horizon 5 --output result.json
-
-# From PCAP
-python forecast_pcap.py --input capture.pcap --horizon 5 --output result.json
-```
-
-### Tests
-```bash
-python -m pytest tests/ -v
-```
-
----
-
-## Documentation
-
-- `docs/ARCHITECTURE.md` — technical architecture
-- `docs/EXPERIMENTS.md` — evaluation methodology and honest results
-- `docs/MODEL_CARD.md` — model details, capabilities, limitations
-- `docs/HOW_TO_RUN.pdf` — step-by-step **How to Run** guide (regenerate with `python make_howto_pdf.py`)
-- `PROJECT_AUDIT.md` — pre-refactor audit
-- `REMOVED_COMPONENTS.md` — what was removed and why
-- `FINAL_AUDIT.md` — PS-requirement compliance checklist
-
----
-
-## Configuration
-
-All configuration in `configs/config.yaml`:
-- Window/sequence/forecast parameters
-- Feature group toggles
-- Model hyperparameters
-- Counterfactual actions
-- Ablation study configs
-- Dashboard settings
-
-Environment variables override defaults (see `.env.example`).
-
----
-
-## Dataset Adapters
-
-Supported datasets (adapters in `netwatch/ingestion/datasets/adapters.py`):
-- CIC-IDS2017/2018
-- CTU-13
-- UNSW-NB15
-- CICIoT2023
-
-Dataset complexity levels (1-6) in `netwatch/ingestion/dataset_levels.py`.
-
----
-
-## License
+## 📄 License
 
 MIT License.
+
+---
+
+## 🙏 Acknowledgements
+
+- **NTRO** — Problem owner (SIH-26153)
+- **Wireshark Foundation** — TShark packet capture engine
+- **PyTorch / scikit-learn / SHAP** — ML stack

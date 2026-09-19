@@ -21,9 +21,64 @@ import argparse
 import json
 import logging
 import os
+import sys
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _load_dotenv(path: Path = None) -> None:
+    """Minimal .env loader: KEY=VALUE lines, no shell expansion.
+    Does not override existing environment variables.
+    """
+    path = path or Path(__file__).resolve().parent / ".env"
+    if not path.exists():
+        return
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip()
+            # strip surrounding quotes if present
+            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                val = val[1:-1]
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Could not load .env (%s): %s", path, e)
+
+
+def _log_tshark_status() -> None:
+    """Log TShark availability at startup (non-fatal)."""
+    try:
+        from netwatch.live.tshark_locator import detect_tshark
+        from netwatch.live.config import TSHARK_PATH
+        info = detect_tshark(TSHARK_PATH)
+        if info.get("available"):
+            logger.info(
+                "TShark detected: %s (%s) — live capture available",
+                info.get("version", "?"),
+                info.get("path", "?"),
+            )
+        elif info.get("installed"):
+            logger.warning(
+                "TShark found at %s but capture unavailable: %s",
+                info.get("path"),
+                info.get("reason"),
+            )
+        else:
+            logger.info(
+                "TShark not found (offline modes: PCAP/CSV/JSONL/synthetic still work). "
+                "Run scripts/check_tshark.py or scripts/setup.py to install and enable live monitoring."
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.debug("TShark startup check skipped: %s", e)
 
 
 def run_pipeline():
@@ -61,11 +116,24 @@ def start_server(port: int, with_pipeline: bool = True):
         except Exception as exc:  # dashboard will build the pipeline lazily if needed
             logger.warning("Pipeline prewarm failed (dashboard will retry on demand): %s", exc)
 
+    _log_tshark_status()
+
     logger.info("Starting Counterfactual Cyber World dashboard at http://localhost:%s", port)
-    app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG", "0") == "1", threaded=True)
+    try:
+        from waitress import serve
+        threads = int(os.getenv("NETWATCH_THREADS", "16"))
+        logger.info("Serving via waitress (%s threads)", threads)
+        serve(app, host="0.0.0.0", port=port, threads=threads,
+              channel_timeout=120)
+    except ImportError:
+        debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+        app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)
 
 
 def main():
+    # Load .env early so env vars are available for config resolution
+    _load_dotenv()
+
     parser = argparse.ArgumentParser(
         description="SIH26153 — Counterfactual Cyber World Model dashboard"
     )

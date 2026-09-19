@@ -606,6 +606,31 @@ export interface LiveHealthInfo {
   path: string | null;
   version: string | null;
   error: string | null;
+  installed?: boolean;
+  capture_available?: boolean;
+  platform?: string;
+  reason?: string;
+}
+
+export interface SystemDependencies {
+  python: {
+    available: boolean;
+    version: string;
+    implementation: string;
+  };
+  tshark: {
+    available: boolean;
+    path: string | null;
+    version: string | null;
+    platform: string;
+    capture_available: boolean;
+    reason: string | null;
+  };
+  live_capture: {
+    available: boolean;
+    interfaces: string[];
+    interface_count: number;
+  };
 }
 
 export interface LiveInterface {

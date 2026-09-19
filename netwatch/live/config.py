@@ -22,7 +22,9 @@ def _env(key: str, default):
 
 LIVE_ENABLED: bool = _env("NETWATCH_LIVE_ENABLED", True)
 
-TSHARK_PATH: str = _env("NETWATCH_TSHARK_PATH", "tshark")
+# TShark executable. Prefer the explicit TSHARK_PATH override; fall back to
+# the legacy NETWATCH_TSHARK_PATH name. Empty = auto-discover (tshark_locator).
+TSHARK_PATH: str = (_env("TSHARK_PATH", "") or _env("NETWATCH_TSHARK_PATH", "") or "")
 TSHARK_OUTPUT_FORMAT: str = _env("NETWATCH_LIVE_TSHARK_FORMAT", "ek")
 TSHARK_BPF_FILTER: str = _env("NETWATCH_LIVE_BPF_FILTER", "")
 TSHARK_SNAPLEN: int = _env("NETWATCH_LIVE_SNAPLEN", 65535)

@@ -82,9 +82,28 @@ def _ensure_prewarm() -> None:
         return
     _PREWARM_STARTED = True
 
+    def _preload_heavy_modules() -> None:
+        """Import heavy request-time modules up-front so the first interaction
+        (page load, analysis run, live capture) never blocks on imports."""
+        try:
+            from netwatch.live import interface, manager, health as _live_health  # noqa: F401
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Live monitoring preload failed: %s", e)
+        try:
+            from netwatch.dashboard import analysis as _analysis  # noqa: F401
+            from netwatch.dashboard.synthetic import scenario_manifest  # noqa: F401
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Analysis preload failed: %s", e)
+        try:
+            from netwatch.forecasting.ensemble_scorer import EnsembleScorer  # noqa: F401
+            from netwatch.counterfactual.simulator import CounterfactualEngine  # noqa: F401
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Forecast/counterfactual preload failed: %s", e)
+
     def body() -> None:
         try:
             _build_pipeline()
+            _preload_heavy_modules()
             logger.info("Background pipeline prewarm complete.")
         except Exception as e:  # noqa: BLE001
             logger.warning("Background pipeline prewarm failed: %s", e)
@@ -658,15 +677,18 @@ def create_app():
             return response
         if "gzip" not in (request.headers.get("Accept-Encoding") or ""):
             return response
+        # Streaming responses (SSE live events, big file downloads) would be
+        # buffered indefinitely by get_data(); never gzip them.
+        if response.direct_passthrough:
+            return response
         ct = (response.headers.get("Content-Type") or "").split(";")[0]
+        if ct == "text/event-stream":
+            return response
         if not (ct.startswith("text/") or ct in (
                 "application/javascript", "application/json", "application/xml")):
             return response
         if response.headers.get("Content-Encoding"):
             return response
-        if response.direct_passthrough:
-            response.direct_passthrough = False
-            response.get_data(as_text=False)  # buffer the streamed file
         data = response.get_data()
         if data is None or len(data) < 256:
             return response
@@ -1086,6 +1108,41 @@ def create_app():
     def api_retrain():
         pipe = _build_pipeline(force_retrain=True)
         return jsonify({"status": "retrained", "n_states": len(pipe.states)})
+
+    # ── System dependencies (Python, TShark, live capture) ────────
+    @app.route("/api/system/dependencies")
+    def api_system_dependencies():
+        """Report Python, TShark and live capture availability."""
+        import sys
+        import platform
+        from netwatch.live.tshark_locator import get_tshark_capabilities
+        from netwatch.live.interface import discover_interfaces
+
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        tshark = get_tshark_capabilities()
+        interfaces = discover_interfaces()
+        up_interfaces = [i for i in interfaces if str(i.get("state", "")).upper() == "UP" and not i.get("is_loopback", False)]
+
+        return jsonify({
+            "python": {
+                "available": True,
+                "version": python_version,
+                "implementation": platform.python_implementation(),
+            },
+            "tshark": {
+                "available": tshark.get("available", False),
+                "path": tshark.get("path"),
+                "version": tshark.get("version"),
+                "platform": tshark.get("platform"),
+                "capture_available": tshark.get("capture_available", False),
+                "reason": tshark.get("reason"),
+            },
+            "live_capture": {
+                "available": tshark.get("available", False),
+                "interfaces": [i.get("name") for i in up_interfaces],
+                "interface_count": len(up_interfaces),
+            },
+        })
 
     # ── Live Monitoring (TShark) API ────────────────────────────
 

@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  # Prevent Python from writing .pyc files and buffering stdout/stderr
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONUNBUFFERED: 1
+
+jobs:
+  # ────────────────────────────────────────────────────────────────
+  # Unit tests (no TShark required — uses MockTsharkRunner)
+  # ────────────────────────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit tests (exclude integration)
+        run: |
+          python -m pytest tests/ -v -m "not integration and not tshark_integration" --tb=short
+
+  # ────────────────────────────────────────────────────────────────
+  # TShark integration tests (run only when TShark is available)
+  # ────────────────────────────────────────────────────────────────
+  tshark-integration:
+    name: TShark Integration Tests
+    runs-on: ubuntu-latest
+    # Only run if TSHARK_INTEGRATION_TESTS secret is set or on manual dispatch
+    if: ${{ env.TSHARK_INTEGRATION_TESTS == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install TShark
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tshark tcpdump
+          # Grant capture permission to dumpcap for non-root
+          sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/dumpcap || true
+
+      - name: Verify TShark
+        run: |
+          tshark --version
+          tshark -D
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run TShark integration tests
+        run: |
+          python -m pytest tests/ -v -m "tshark_integration" --tb=short
+        env:
+          TSHARK_INTEGRATION_TESTS: "1"
+          NETWATCH_LIVE_ENABLED: "1"
+
+  # ────────────────────────────────────────────────────────────────
+  # Lint & type check
+  # ────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install lint tools
+        run: |
+          pip install ruff mypy
+
+      - name: Run ruff
+        run: ruff check netwatch scripts tests
+
+      - name: Run mypy (basic)
+        run: |
+          mypy --ignore-missing-imports netwatch/live/tshark_locator.py netwatch/live/tshark_command.py netwatch/live/tshark_runner.py || true
+
+  # ────────────────────────────────────────────────────────────────
+  # Build frontend (verify it compiles)
+  # ────────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  # ────────────────────────────────────────────────────────────────
+  # Docker build test (verify Dockerfile works)
+  # ────────────────────────────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build development image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: development
+          load: true
+          tags: netwatch:dev
+
+      - name: Test development image
+        run: |
+          docker run --rm netwatch:dev python -c "import netwatch; print('Import OK')"
+
+      - name: Build live-capture image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: live-capture
+          load: true
+          tags: netwatch:live
+
+      - name: Test live-capture image (verify tshark present)
+        run: |
+          docker run --rm netwatch:live tshark --version

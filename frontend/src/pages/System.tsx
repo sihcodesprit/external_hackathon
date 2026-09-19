@@ -2,8 +2,8 @@ import { useState } from "react";
 import { palette } from "../styles/theme";
 import { api } from "../services/api";
 import { useFetch } from "../hooks/useFetch";
-import type { ModelStatus, SystemInfo } from "../types";
-import { Card, Grid, KeyValue, Pill, Tag } from "../components/ui/primitives";
+import type { ModelStatus, SystemInfo, SystemDependencies } from "../types";
+import { Card, Grid, KeyValue, Pill, Tag, Dot, Row } from "../components/ui/primitives";
 import { Button } from "../components/ui/Button";
 import { ErrorState, PageLoader } from "../components/ui/displays";
 import { fmtInt, fmtBytes, fmtDuration, fmtDateTime } from "../utils/format";
@@ -11,6 +11,7 @@ import { fmtInt, fmtBytes, fmtDuration, fmtDateTime } from "../utils/format";
 export default function System() {
   const { data: info, loading: infoLoading, error: infoError } = useFetch(() => api.systemInfo(), []);
   const { data: models, loading: modelsLoading, error: modelsError, refresh } = useFetch(() => api.modelsStatus(), []);
+  const { data: deps, loading: depsLoading } = useFetch(() => api.systemDependencies(), []);
   const [retraining, setRetraining] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -56,8 +57,50 @@ export default function System() {
           )}
         </Card>
 
+        <Card title="Dependencies" subtitle="TShark live capture & runtime">
+          {depsLoading && <PageLoader label="Probing dependencies…" />}
+          {deps && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Dot color={deps.python.available ? palette.good : palette.danger} />
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Python</span>
+                </div>
+                <KeyValue k="Version" v={deps.python.version} mono />
+                <KeyValue k="Implementation" v={deps.python.implementation} />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Dot color={deps.tshark.available ? palette.good : deps.tshark.capture_available ? palette.accent : palette.danger} />
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>TShark</span>
+                </div>
+                <KeyValue k="Available" v={deps.tshark.available ? "Yes" : "No"} />
+                <KeyValue k="Capture Ready" v={deps.tshark.capture_available ? "Yes" : "No"} />
+                {deps.tshark.path && <KeyValue k="Path" v={deps.tshark.path} mono />}
+                {deps.tshark.version && <KeyValue k="Version" v={deps.tshark.version} mono />}
+                {deps.tshark.reason && <KeyValue k="Note" v={deps.tshark.reason} />}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Dot color={deps.live_capture.available ? palette.good : palette.danger} />
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Live Capture</span>
+                </div>
+                <KeyValue k="Ready" v={deps.live_capture.available ? "Yes" : "No"} />
+                <KeyValue k="Interfaces" v={String(deps.live_capture.interface_count)} />
+                {deps.live_capture.interfaces.length > 0 && (
+                  <div style={{ fontSize: 11, color: palette.textMuted }}>
+                    {deps.live_capture.interfaces.slice(0, 3).join(", ")}
+                    {deps.live_capture.interfaces.length > 3 && " …"}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </Card>
+
         <Card
-          title="Model registry"
           subtitle="Registered checkpoints"
           headerRight={
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

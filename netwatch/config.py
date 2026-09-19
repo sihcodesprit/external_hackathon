@@ -171,7 +171,8 @@ DEMO_MODE = _get("dashboard.demo_mode", True)
 
 # ── Live Monitoring (TShark) ──────────────────────────────
 LIVE_ENABLED = _env_override("NETWATCH_LIVE_ENABLED", _get("live.enabled", True))
-LIVE_TSHARK_PATH = _env_override("NETWATCH_TSHARK_PATH", _get("live.tshark_path", "tshark"))
+# Empty means auto-discovery via netwatch.live.tshark_locator.
+LIVE_TSHARK_PATH = _env_override("TSHARK_PATH", _env_override("NETWATCH_TSHARK_PATH", _get("live.tshark_path", "")))
 LIVE_TSHARK_OUTPUT_FORMAT = _env_override("NETWATCH_LIVE_TSHARK_FORMAT", _get("live.output_format", "ek"))
 LIVE_BPF_FILTER = _env_override("NETWATCH_LIVE_BPF_FILTER", _get("live.bpf_filter", ""))
 LIVE_SNAPLEN = _env_override("NETWATCH_LIVE_SNAPLEN", _get("live.snaplen", 65535))

@@ -236,14 +236,15 @@ export default function UrlMonitor() {
   const start = async () => {
     if (!selected || !url.trim()) return;
     setError(null);
-    setPhase("checking");
+    // Ensure TShark is available first
     const h = health ?? (await api.liveHealth());
     setHealth(h);
     if (!h?.available) {
-      setError("TShark is not available. Install Wireshark (tshark) or set NETWATCH_TSHARK_PATH.");
+      setError("TShark is not available. Install Wireshark (tshark) or set TSHARK_PATH.");
       setPhase("error");
       return;
     }
+    setPhase("checking");
     try {
       const res = await api.liveUrlStart({ url: url.trim(), interface: selected });
       if (res.error) {
@@ -306,8 +307,17 @@ export default function UrlMonitor() {
         {phase === "capturing" ? (
           <Button variant="danger" size="sm" onClick={stop}>STOP</Button>
         ) : (
-          <Button size="sm" onClick={start} disabled={!selected || phase === "checking"}>
-            {phase === "checking" ? "Starting…" : "START URL MONITOR"}
+          <Button
+            size="sm"
+            onClick={start}
+            disabled={!selected || !url.trim() || phase === "checking" || !health?.available}
+            title={!health?.available ? "TShark is required for real-time URL traffic monitoring" : undefined}
+          >
+            {phase === "checking"
+              ? "Starting…"
+              : !health?.available
+              ? "Install TShark to enable"
+              : "START URL MONITOR"}
           </Button>
         )}
       </div>

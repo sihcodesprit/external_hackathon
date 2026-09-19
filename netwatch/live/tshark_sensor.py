@@ -1,9 +1,13 @@
-"""TShark live capture sensor — subprocess management."""
+"""TShark live capture sensor — subprocess management.
+
+Refactored to use the central TShark locator, safe command builder, and a
+pluggable runner interface (RealTsharkRunner / MockTsharkRunner).
+"""
+
+from __future__ import annotations
 
 import json
 import logging
-import os
-import subprocess
 import threading
 import time
 from collections import deque
@@ -12,28 +16,24 @@ from typing import Callable, Optional
 from netwatch.live.config import (
     TSHARK_BPF_FILTER,
     TSHARK_OUTPUT_FORMAT,
-    TSHARK_PATH,
     TSHARK_PROMISCUOUS,
     TSHARK_SNAPLEN,
     LIVE_MAX_EVENT_QUEUE,
     LIVE_EVENTS_PER_SECOND_LOG,
 )
+from netwatch.live.tshark_command import (
+    _validate_interface as _validate_interface_impl,
+    build_live_capture_command,
+)
+from netwatch.live.tshark_locator import locate_tshark, validate_tshark
+from netwatch.live.tshark_runner import RealTsharkRunner, TsharkRunner
 
 logger = logging.getLogger(__name__)
 
-# Safe interface name validation: only alphanumeric, hyphens, underscores, dots
-_VALID_IFACE_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
 
-
+# Backward-compat re-export (tests import this name from tshark_sensor)
 def _validate_interface(iface: str) -> str:
-    """Validate and return interface name, raise ValueError if invalid."""
-    if not iface or not isinstance(iface, str):
-        raise ValueError("Interface name is required")
-    if not all(c in _VALID_IFACE_CHARS for c in iface):
-        raise ValueError(f"Invalid interface name: {iface!r}")
-    if len(iface) > 255:
-        raise ValueError("Interface name too long")
-    return iface
+    return _validate_interface_impl(iface)
 
 
 class TSharkSensor:
@@ -42,8 +42,9 @@ class TSharkSensor:
     Produces JSON lines (one per packet) via a callback or internal queue.
     """
 
-    def __init__(self):
-        self._process: Optional[subprocess.Popen] = None
+    def __init__(self, runner: Optional[TsharkRunner] = None):
+        self._runner = runner or RealTsharkRunner()
+        self._process: Optional[object] = None
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._callback: Optional[Callable[[dict], None]] = None
@@ -61,16 +62,36 @@ class TSharkSensor:
 
     @property
     def is_running(self) -> bool:
-        return self._running and self._process is not None and self._process.poll() is None
+        return (
+            self._running
+            and self._process is not None
+            and getattr(self._process, "poll", lambda: None)() is None
+        )
 
     @property
     def stats(self) -> dict:
         with self._lock:
             return dict(self._stats)
 
-    def start(self, interface: str, callback: Optional[Callable[[dict], None]] = None,
-              bpf_filter: Optional[str] = None,
-              output_format: Optional[str] = None) -> bool:
+    def _resolve_executable(self) -> Optional[str]:
+        """Resolve TShark executable: config hint -> locator auto-discovery."""
+        from netwatch.live.config import TSHARK_PATH
+
+        hint = (TSHARK_PATH or "").strip()
+        if hint:
+            resolved = locate_tshark(hint)
+            if resolved:
+                return resolved
+        # No config hint or hint failed -> auto-discover
+        return locate_tshark("")
+
+    def start(
+        self,
+        interface: str,
+        callback: Optional[Callable[[dict], None]] = None,
+        bpf_filter: Optional[str] = None,
+        output_format: Optional[str] = None,
+    ) -> bool:
         """Start TShark capture on the given interface.
 
         callback: called with parsed JSON dict for each packet line.
@@ -82,22 +103,33 @@ class TSharkSensor:
 
         iface = _validate_interface(interface)
         fmt = output_format or TSHARK_OUTPUT_FORMAT
+        bf = bpf_filter or TSHARK_BPF_FILTER
         snaplen = str(TSHARK_SNAPLEN)
 
-        cmd = [
-            TSHARK_PATH,
-            "-i", iface,
-            "-l",
-            "-T", fmt,
-            "-a", "duration:3600",
-        ]
-        if snaplen and snaplen != "0":
-            cmd.extend(["-s", snaplen])
-        if TSHARK_PROMISCUOUS:
-            cmd.insert(3, "-p")
-        bf = bpf_filter or TSHARK_BPF_FILTER
-        if bf:
-            cmd.extend(["-f", bf])
+        exe = self._resolve_executable()
+        if not exe:
+            with self._lock:
+                self._stats["error"] = (
+                    "TShark executable not found. "
+                    "Run scripts/check_tshark.py or scripts/setup.py to install and configure TShark."
+                )
+            logger.error("TShark executable not found (config hint: %r)", TSHARK_PATH)
+            return False
+
+        try:
+            cmd = build_live_capture_command(
+                executable=exe,
+                interface=iface,
+                output_format=fmt,
+                bpf_filter=bf,
+                snaplen=int(snaplen),
+                promiscuous=TSHARK_PROMISCUOUS,
+            )
+        except ValueError as e:
+            with self._lock:
+                self._stats["error"] = f"Invalid TShark arguments: {e}"
+            logger.error("Invalid TShark command arguments: %s", e)
+            return False
 
         logger.info("Starting TShark: %s", " ".join(cmd))
         with self._lock:
@@ -112,18 +144,11 @@ class TSharkSensor:
             }
 
         try:
-            self._process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                shell=False,
-                bufsize=1,
-                text=True,
-            )
+            self._process = self._runner.launch(cmd)
         except FileNotFoundError:
             with self._lock:
-                self._stats["error"] = "TShark executable not found"
-            logger.error("TShark executable not found at: %s", TSHARK_PATH)
+                self._stats["error"] = "TShark executable not found at resolved path"
+            logger.error("TShark executable not found at: %s", exe)
             return False
         except PermissionError:
             with self._lock:
@@ -152,21 +177,14 @@ class TSharkSensor:
         self._running = False
         stats = {}
         with self._lock:
-            if self._process and self._process.poll() is None:
+            if self._process and getattr(self._process, "poll", lambda: None)() is None:
                 try:
-                    self._process.terminate()
-                    self._process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    try:
-                        self._process.kill()
-                        self._process.wait(timeout=3)
-                    except Exception:
-                        pass
-                except Exception:
+                    self._runner.terminate(self._process)
+                except Exception:  # noqa: BLE001
                     pass
             if self._process:
-                stats["exit_code"] = self._process.returncode
-                self._stats["exit_code"] = self._process.returncode
+                stats["exit_code"] = getattr(self._process, "returncode", None)
+                self._stats["exit_code"] = getattr(self._process, "returncode", None)
                 self._process = None
             stats.update(self._stats)
             self._stats["error"] = None
@@ -180,7 +198,7 @@ class TSharkSensor:
 
     def _reader_loop(self):
         """Read stdout lines from TShark and dispatch to callback."""
-        if not self._process or not self._process.stdout:
+        if not self._process or not getattr(self._process, "stdout", None):
             return
         line_count = 0
         last_log = time.time()
@@ -203,7 +221,7 @@ class TSharkSensor:
                 if self._callback:
                     try:
                         self._callback(parsed)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         logger.warning("Callback error: %s", e)
                 else:
                     self._queue.append(parsed)
@@ -214,7 +232,7 @@ class TSharkSensor:
                         rate = self._stats["packets_captured"] / max(elapsed, 0.001)
                     logger.debug("TShark rate: %.0f pkts/sec", rate)
                     last_log = now
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("TShark reader error: %s", e)
             with self._lock:
                 self._stats["error"] = str(e)
@@ -223,7 +241,9 @@ class TSharkSensor:
             if self._process:
                 stderr_data = ""
                 try:
-                    stderr_data = self._process.stderr.read(4096) if self._process.stderr else ""
+                    stderr_data = (
+                        self._process.stderr.read(4096) if getattr(self._process, "stderr", None) else ""
+                    )
                 except Exception:
                     pass
                 if stderr_data:
@@ -244,8 +264,8 @@ class TSharkSensor:
         """Return error message if process died, else None."""
         if not self._running:
             return "TShark is not running"
-        if self._process and self._process.poll() is not None:
-            code = self._process.returncode
+        if self._process and getattr(self._process, "poll", lambda: None)() is not None:
+            code = getattr(self._process, "returncode", None)
             with self._lock:
                 err = self._stats.get("error", "")
             return f"TShark exited with code {code}: {err}"

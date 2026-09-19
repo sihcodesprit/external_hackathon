@@ -131,15 +131,15 @@ export default function LiveMonitor() {
   const start = async () => {
     if (!selected) return;
     setError(null);
-    setPhase("checking");
     // Ensure TShark is available first
     const h = health ?? (await api.liveHealth());
     setHealth(h);
     if (!h?.available) {
-      setError("TShark is not available. Install Wireshark (tshark) or set NETWATCH_TSHARK_PATH.");
+      setError("TShark is not available. Install Wireshark (tshark) or set TSHARK_PATH.");
       setPhase("error");
       return;
     }
+    setPhase("checking");
     try {
       const res = await api.liveStart({ interface: selected });
       if (res.error) {
@@ -183,8 +183,17 @@ export default function LiveMonitor() {
             Stop capture
           </Button>
         ) : (
-          <Button size="sm" onClick={start} disabled={!selected || phase === "checking"}>
-            {phase === "checking" ? "Starting…" : "Start capture"}
+          <Button
+            size="sm"
+            onClick={start}
+            disabled={!selected || phase === "checking" || !health?.available}
+            title={!health?.available ? "Install TShark to enable live network monitoring" : undefined}
+          >
+            {phase === "checking"
+              ? "Starting…"
+              : !health?.available
+              ? "Install TShark to enable"
+              : "Start capture"}
           </Button>
         )}
       </div>
