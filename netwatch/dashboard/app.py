@@ -41,6 +41,27 @@ from netwatch.pipeline import Pipeline
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _configure_file_logging() -> None:
+    """Mirror ERROR-level logs (incl. tracebacks) to netwatch_server.log."""
+    try:
+        from logging.handlers import RotatingFileHandler
+
+        log_path = Path(__file__).resolve().parent.parent.parent / "netwatch_server.log"
+        handler = RotatingFileHandler(
+            str(log_path), maxBytes=2_000_000, backupCount=2, encoding="utf-8")
+        handler.setLevel(logging.ERROR)
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        root = logging.getLogger()
+        if not any(isinstance(h, RotatingFileHandler) for h in root.handlers):
+            root.addHandler(handler)
+    except Exception:  # logging must never break the app
+        pass
+
+
+_configure_file_logging()
+
 _pipeline_cache = {}
 _pipeline_lock = threading.Lock()
 
@@ -710,8 +731,9 @@ def create_app():
         return jsonify({"error": "Not found"}), 404
 
     @app.errorhandler(500)
-    def internal_error(_err):
-        return jsonify({"error": "Internal server error"}), 500
+    def internal_error(err):
+        logger.error("Unhandled server error: %s", err, exc_info=True)
+        return jsonify({"error": f"Internal server error: {err}"}), 500
 
     # ── Health / model inspection ─────────────────────────────
     def _inspect_model_artifacts() -> dict:
