@@ -47,7 +47,7 @@ jobs:
           status=$?
           set -e
           if [ $status -ne 0 ]; then
-            sed 's/^/::error::/' /tmp/pytest_out.txt | tail -60
+            grep "FAILED" /tmp/pytest_out.txt | head -10 | sed 's/^/::error::/'
           fi
           exit $status
 
