@@ -1417,7 +1417,6 @@ def create_app():
             headers={
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
-                "Connection": "keep-alive",
             },
         )
 
