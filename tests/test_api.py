@@ -122,6 +122,8 @@ def test_unknown_api_route_returns_json_404(client):
 
 
 def test_spa_route_serves_index_html(client):
+    if not FRONTEND_INDEX.is_file():
+        pytest.skip("frontend/dist not built in this environment; run npm run build")
     resp = client.get("/some/client/route")
     assert resp.status_code == 200
     assert "text/html" in resp.content_type
