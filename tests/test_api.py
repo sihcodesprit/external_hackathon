@@ -4,9 +4,15 @@ The dashboard lazily trains the World Model once (lru_cache), so these tests
 share that cached pipeline and stay fast after the first call.
 """
 
+from pathlib import Path
+
 import pytest
 
 from netwatch.dashboard.app import app
+
+FRONTEND_INDEX = (
+    Path(__file__).resolve().parent.parent / "frontend" / "dist" / "index.html"
+)
 
 PAGE_ROUTES = [
     "/", "/overview", "/analyze", "/network-state", "/forecast",
@@ -32,6 +38,8 @@ def client():
 
 @pytest.mark.parametrize("path", PAGE_ROUTES)
 def test_page_route_returns_200(client, path):
+    if not FRONTEND_INDEX.is_file():
+        pytest.skip("frontend/dist not built in this environment; run npm run build")
     resp = client.get(path)
     assert resp.status_code == 200
 
