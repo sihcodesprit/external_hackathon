@@ -10,7 +10,7 @@ import math
 import statistics
 from collections import Counter
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 

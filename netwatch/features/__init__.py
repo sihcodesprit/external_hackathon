@@ -15,15 +15,15 @@ Modules:
 - sequences: Temporal sequence dataset construction
 """
 
-from netwatch.features.network_state import NetworkState, StateBuilder, compute_window_features
 from netwatch.features.feature_registry import REGISTRY, get_feature_columns, get_n_features
+from netwatch.features.network_state import NetworkState, StateBuilder, compute_window_features
 from netwatch.features.sequences import (
     StateNormalizer,
     assign_labels_and_stages,
-    build_sequences,
     build_seq_labels,
-    temporal_split,
+    build_sequences,
     split_by_group,
+    temporal_split,
 )
 
 __all__ = [

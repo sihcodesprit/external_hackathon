@@ -4,7 +4,7 @@ Dataset Level Support — Different tiers of dataset complexity for training and
 Provides dataset configurations for different complexity levels:
 - Level 1: Basic traffic features only (sanity check)
 - Level 2: + Packet-level features
-- Level 3: + Entropy features  
+- Level 3: + Entropy features
 - Level 4: + Temporal/jitter features
 - Level 5: + Graph features
 - Level 6: + All advanced features (TCP handshake, Markov, trajectory, baseline)
@@ -13,7 +13,7 @@ Provides dataset configurations for different complexity levels:
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from netwatch.features.feature_registry import FeatureRegistry, FeatureGroup, REGISTRY
+from netwatch.features.feature_registry import REGISTRY, FeatureGroup, FeatureRegistry
 
 
 @dataclass
@@ -36,7 +36,7 @@ class DatasetLevel:
     datasets: List[str] = field(default_factory=lambda: ["synthetic"])
     # Expected performance targets (for validation)
     target_metrics: Dict[str, float] = field(default_factory=dict)
-    
+
     def create_registry(self) -> FeatureRegistry:
         """Create a feature registry with only the enabled groups."""
         registry = FeatureRegistry()
@@ -143,7 +143,7 @@ def get_level_config(level_name: str) -> Dict:
     level = get_level(level_name)
     if not level:
         raise ValueError(f"Unknown dataset level: {level_name}")
-    
+
     return {
         "name": level.name,
         "description": level.description,
@@ -168,7 +168,7 @@ def apply_level_to_config(level_name: str, base_config: Dict) -> Dict:
     level = get_level(level_name)
     if not level:
         raise ValueError(f"Unknown dataset level: {level_name}")
-    
+
     config = base_config.copy()
     config.update({
         "sequence_length": level.sequence_length,

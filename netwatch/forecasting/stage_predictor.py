@@ -11,7 +11,7 @@ states return the 'benign' default with a low probability.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from netwatch.models.baselines.benchmark import build_classifier
 
@@ -76,18 +76,12 @@ class StagePredictor:
                     "note": "Need >=2 distinct stage labels to train a classifier."}
         self.model = build_classifier("gradient_boosting")
         self.class_names = unique
-        self.model.fit(X, [self.class_names.index(l) for l in labels])
+        self.model.fit(X, [self.class_names.index(label) for label in labels])
         return {"status": "trained", "classes": self.class_names}
 
     def predict_proba(self, features: Dict[str, float]) -> Dict[str, float]:
         """Return probability per stage. Falls back to heuristic when no
         trained model or when evidence is insufficient."""
-        vec = [features.get(c, 0.0) for c in
-               ["bytes", "packets", "ttl_mean", "payload_mean", "payload_max",
-                "tcp_window_mean", "packets_per_second", "connection_rate",
-                "unique_dst_ports", "unique_dst_hosts", "syn_rate", "ack_rate",
-                "rst_rate", "syn_ack_ratio", "port_entropy"]]
-
         # Heuristic calibrated probabilities
         stage = heuristic_stage(features)
         if stage == "Benign":

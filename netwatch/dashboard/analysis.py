@@ -12,11 +12,10 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
-
-from netwatch.config import get_feature_columns
 from netwatch.features.entropy_features import shannon_entropy
-from netwatch.features.network_state import NetworkState, StateBuilder
+from netwatch.features.network_state import NetworkState
+
+logger = logging.getLogger(__name__)
 
 # Feature grouping keyed to the groups actually produced by StateBuilder
 _TRAFFIC_KEYS = [
@@ -273,7 +272,7 @@ def analyze_records(records: List[Any], filename: str, member: Optional[str] = N
     # persist=False → no dataset/model files are written to disk).
     tick("World Model training", 32, "Training world model on this capture.")
     try:
-        train_info = pipe.train(persist=False, model_type="linear")
+        pipe.train(persist=False, model_type="linear")
     except Exception as e:  # noqa: BLE001
         return {"error": f"Could not train the world model on this capture: {e}"}
 

@@ -13,18 +13,16 @@ Platform detection and appropriate install flow:
 from __future__ import annotations
 
 import logging
-import os
 import platform
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from scripts._setup_common import (
-    REPO_ROOT,
     LOG,
+    REPO_ROOT,
     detect_python,
     discover_tshark_path,
     ensure_venv,
@@ -234,8 +232,8 @@ def verify_setup(tshark_path: Optional[Path]) -> bool:
 
     # Import check
     try:
-        from netwatch.live.tshark_locator import detect_tshark
         from netwatch.live.config import TSHARK_PATH
+        from netwatch.live.tshark_locator import detect_tshark
         info = detect_tshark(TSHARK_PATH)
         print(f"         Locator: available={info.get('available')}, path={info.get('path')}")
     except Exception as e:

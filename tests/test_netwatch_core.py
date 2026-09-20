@@ -1,18 +1,17 @@
-import numpy as np
-import pytest
 from datetime import datetime, timedelta
 
+import numpy as np
+import pytest
+
 from netwatch.config import get_feature_columns
-from netwatch.ingestion.parser import PacketRecord
-from netwatch.features.network_state import StateBuilder
+from netwatch.counterfactual.simulator import CounterfactualEngine
 from netwatch.features.sequences import (
     StateNormalizer,
-    assign_labels_and_stages,
     build_sequences,
     temporal_split,
 )
 from netwatch.forecasting.attack_forecaster import AttackForecaster
-from netwatch.counterfactual.simulator import CounterfactualEngine
+from netwatch.ingestion.parser import PacketRecord
 from netwatch.models.trainer import WorldModelTrainer
 
 

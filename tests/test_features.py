@@ -5,12 +5,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from netwatch.config import get_feature_columns
+from netwatch.features.entropy_features import shannon_entropy
 from netwatch.features.network_state import (
     NetworkState,
     StateBuilder,
     compute_window_features,
 )
-from netwatch.features.entropy_features import shannon_entropy
 from netwatch.ingestion.parser import PacketRecord
 
 

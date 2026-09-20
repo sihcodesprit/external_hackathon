@@ -10,10 +10,8 @@ import argparse
 import concurrent.futures
 import json
 import logging
-import os
 import random
 import socket
-import sys
 import time
 import urllib.error
 import urllib.parse
@@ -78,7 +76,7 @@ class AttackSession:
 
     def stop(self):
         self.is_running = False
-        self.log(f"Attack execution requested to STOP.")
+        self.log("Attack execution requested to STOP.")
 
     def run(self) -> Dict:
         self.is_running = True
@@ -117,8 +115,8 @@ class AttackSession:
     # ── 1. Reconnaissance (Port Scan) ─────────────────────────────────────────
     def _run_recon(self):
         """Scans ports with TCP connect probes to create fan-out and entropy shifts."""
-        self.log(f"[Recon] Initiating TCP port scan across common enterprise ports & ranges...")
-        
+        self.log("[Recon] Initiating TCP port scan across common enterprise ports & ranges...")
+
         # Build list of ports
         ports_to_scan = list(COMMON_PORTS)
         # Add random high ports to generate dispersion
@@ -279,7 +277,7 @@ class AttackSession:
     # ── 4. Data Exfiltration ──────────────────────────────────────────────────
     def _run_exfiltration(self):
         """Simulates rapid unauthorized data access and exfiltration transfers."""
-        self.log(f"[Exfiltration] Simulating sensitive directory harvesting and document staging...")
+        self.log("[Exfiltration] Simulating sensitive directory harvesting and document staging...")
         endpoints = [
             f"http://{self.target_ip}:{self.target_port}/api/users",
             f"http://{self.target_ip}:{self.target_port}/api/documents",

@@ -1,8 +1,7 @@
 """Unit tests for MITRE ATT&CK mapping."""
 
-import pytest
 
-from netwatch.mitre.attack_mapper import AttackMapper, STAGE_TO_MITRE
+from netwatch.mitre.attack_mapper import STAGE_TO_MITRE, AttackMapper
 
 
 def test_known_stages_map():

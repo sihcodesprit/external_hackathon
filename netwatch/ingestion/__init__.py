@@ -7,21 +7,21 @@ Modules:
 - datasets.adapters: Public dataset adapters (CIC-IDS, CTU-13, UNSW-NB15, CICIoT)
 """
 
+from netwatch.ingestion.dataset_levels import (
+    DATASET_LEVELS,
+    DatasetLevel,
+    apply_level_to_config,
+    get_level,
+    get_level_config,
+    list_levels,
+)
 from netwatch.ingestion.parser import (
     PacketRecord,
-    load_pcap,
-    load_flow_csv,
-    load_packets_jsonl,
     ingest,
     iter_records,
-)
-from netwatch.ingestion.dataset_levels import (
-    DatasetLevel,
-    DATASET_LEVELS,
-    get_level,
-    list_levels,
-    get_level_config,
-    apply_level_to_config,
+    load_flow_csv,
+    load_packets_jsonl,
+    load_pcap,
 )
 
 __all__ = [

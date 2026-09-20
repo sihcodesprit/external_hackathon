@@ -7,8 +7,8 @@ loop, LiveManager session control (with a fake sensor) and the dashboard's
 
 These tests never require a live TShark process.
 """
-from datetime import datetime, timezone
 import time
+from datetime import datetime, timezone
 
 import pytest
 
@@ -166,6 +166,7 @@ def test_parse_ek_line_no_ip_returns_none():
 
 def test_parse_json_array_line():
     import json
+
     from netwatch.live.event_parser import parse_json_array_line
     doc = _raw_ek_packet()
     assert parse_json_array_line("," + json.dumps(doc)) is not None
@@ -278,7 +279,6 @@ def test_live_pipeline_check_window_no_step_returns_none():
 
 # ── LiveManager session control ───────────────────────────────
 def test_manager_start_stop(live_manager_with_fake):
-    from netwatch.live.manager import LiveManager
     from netwatch.live.live_state import LiveStatus
 
     mgr, fake = live_manager_with_fake
@@ -401,6 +401,7 @@ def test_url_private_hosts_allowed_when_configured():
 
 def test_resolve_hostname_mocked(monkeypatch):
     import socket
+
     from netwatch.live import url_target as ut
 
     def fake_getaddrinfo(host, port, family, socktype):
@@ -443,8 +444,8 @@ def test_url_target_matches_and_direction():
 
 # ── URL metrics ────────────────────────────────────────────────
 def test_compute_url_metrics_real_events():
-    from netwatch.live.url_target import UrlTarget
     from netwatch.live.url_monitor import compute_url_metrics
+    from netwatch.live.url_target import UrlTarget
 
     t = UrlTarget("https://example.com")
     t.current_ips = ["93.184.216.34"]

@@ -1,7 +1,6 @@
 """Live monitoring configuration. All values from env vars or config.yaml live section."""
 
 import os
-from typing import List, Optional
 
 
 def _env(key: str, default):

@@ -8,10 +8,9 @@ Coordinates the Attack Lab environment:
   - Real-time event and output streaming to the dashboard
 """
 
+import json
 import logging
-import os
 import shutil
-import signal
 import socket
 import subprocess
 import sys
@@ -22,7 +21,7 @@ import urllib.request
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 

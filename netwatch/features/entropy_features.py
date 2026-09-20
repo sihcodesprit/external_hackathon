@@ -6,10 +6,8 @@ Also computes temporal derivatives: ΔH(t), Δ²H(t).
 """
 
 import math
-from collections import Counter, defaultdict
+from collections import Counter
 from typing import Dict, List, Optional
-
-import numpy as np
 
 
 def shannon_entropy(values: List) -> float:
@@ -26,24 +24,24 @@ def shannon_entropy(values: List) -> float:
     return entropy
 
 
-def compute_entropy_features(records: List[Dict], 
+def compute_entropy_features(records: List[Dict],
                               prev_entropy: Optional[Dict[str, float]] = None,
                               prev2_entropy: Optional[Dict[str, float]] = None) -> Dict[str, float]:
     """
     Compute entropy features for a window of packet/flow records.
-    
+
     Args:
-        records: List of packet/flow dicts with fields like src_port, dst_port, 
+        records: List of packet/flow dicts with fields like src_port, dst_port,
                  protocol, src_ip, dst_ip, payload_size, packet_size, tcp_flags
         prev_entropy: Previous window's entropy values (for delta)
         prev2_entropy: Two windows ago entropy values (for acceleration)
-    
+
     Returns:
         Dict of entropy features including temporal derivatives
     """
     if not records:
         return _empty_entropy_features()
-    
+
     # Extract value lists
     src_ports = [r.get("src_port", 0) for r in records if r.get("src_port")]
     dst_ports = [r.get("dst_port", 0) for r in records if r.get("dst_port")]
@@ -53,7 +51,7 @@ def compute_entropy_features(records: List[Dict],
     payload_sizes = [r.get("payload_size", 0) for r in records]
     packet_sizes = [r.get("bytes_sent", 0) for r in records]
     tcp_flags = [r.get("flags", "") for r in records if r.get("flags")]
-    
+
     # Base entropies
     entropies = {
         "src_port_entropy": shannon_entropy(src_ports),
@@ -65,7 +63,7 @@ def compute_entropy_features(records: List[Dict],
         "packet_size_entropy": shannon_entropy(packet_sizes),
         "tcp_flag_entropy": shannon_entropy(tcp_flags),
     }
-    
+
     # Temporal derivatives
     if prev_entropy:
         base_keys = list(entropies.keys())
@@ -73,7 +71,7 @@ def compute_entropy_features(records: List[Dict],
             val = entropies[key]
             prev_val = prev_entropy.get(key, 0.0)
             entropies[f"{key}_delta"] = val - prev_val
-            
+
             if prev2_entropy:
                 prev2_val = prev2_entropy.get(key, 0.0)
                 # Acceleration = Δ(current) - Δ(previous) = (val - prev) - (prev - prev2)
@@ -85,7 +83,7 @@ def compute_entropy_features(records: List[Dict],
         for key in base_keys:
             entropies[f"{key}_delta"] = 0.0
             entropies[f"{key}_acceleration"] = 0.0
-    
+
     return entropies
 
 
@@ -104,8 +102,8 @@ def _empty_entropy_features() -> Dict[str, float]:
     return result
 
 
-def update_entropy_history(entropy_history: List[Dict], 
-                           current: Dict, 
+def update_entropy_history(entropy_history: List[Dict],
+                           current: Dict,
                            max_history: int = 3) -> List[Dict]:
     """Maintain a rolling history of entropy features for temporal derivatives."""
     history = entropy_history + [current]

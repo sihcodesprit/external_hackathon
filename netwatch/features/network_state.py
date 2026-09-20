@@ -17,16 +17,17 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from netwatch.config import (
-    WINDOW_SECONDS, WINDOW_STEP_SECONDS, get_feature_columns, get_feature_registry
+    WINDOW_SECONDS,
+    WINDOW_STEP_SECONDS,
+    get_feature_columns,
 )
-from netwatch.ingestion.parser import PacketRecord
+from netwatch.features.baseline_features import BaselineTracker, compute_baseline_features
 from netwatch.features.entropy_features import compute_entropy_features
+from netwatch.features.graph_features import DynamicGraph, compute_graph_features
 from netwatch.features.tcp_features import compute_tcp_handshake_features
 from netwatch.features.temporal_features import compute_temporal_features
-from netwatch.features.graph_features import compute_graph_features, DynamicGraph
-from netwatch.features.trajectory_features import compute_trajectory_features, TrajectoryTracker
-from netwatch.features.baseline_features import compute_baseline_features, BaselineTracker
-
+from netwatch.features.trajectory_features import TrajectoryTracker, compute_trajectory_features
+from netwatch.ingestion.parser import PacketRecord
 
 # Legacy feature group names for backward compatibility
 FLOW_FEATURES = ["bytes", "packets"]
@@ -194,7 +195,7 @@ class StateBuilder:
     """
     Builds a temporal sequence of NetworkState objects from packet records by
     sliding a window over time, grouped (optionally) per (src, dst) pair.
-    
+
     Adaptive windowing: If the total duration of the capture is shorter than
     the default window, it scales down automatically so that ANY size PCAP
     will produce valid state sequences (minimum 1-second windows, at least 2
@@ -210,7 +211,7 @@ class StateBuilder:
     PACKET_BUCKET_MIN_PACKETS = 3
     PACKET_BUCKET_TARGET = 14
 
-    def __init__(self, 
+    def __init__(self,
                  window_seconds: int = WINDOW_SECONDS,
                  window_step: int = WINDOW_STEP_SECONDS,
                  group_by_pair: bool = True,
@@ -219,7 +220,7 @@ class StateBuilder:
         self.window_step = window_step
         self.group_by_pair = group_by_pair
         self.enable_advanced_features = enable_advanced_features
-        
+
         # State for temporal features
         self._entropy_history: List[Dict] = []
         self._handshake_history: List[Dict] = []
@@ -229,7 +230,7 @@ class StateBuilder:
 
     def _adapt_window(self, total_duration: float, n_packets: int) -> tuple:
         """Compute adaptive window size and step based on capture duration.
-        
+
         Returns (window_seconds, window_step).
         """
         ws = self.window_seconds

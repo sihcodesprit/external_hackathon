@@ -10,7 +10,7 @@ technique whose stage/frequency profile differs from the training set.
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict
 
 import numpy as np
 

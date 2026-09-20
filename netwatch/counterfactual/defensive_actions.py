@@ -11,7 +11,7 @@ Each action provides:
 Actions use dynamic feature column lookup instead of hardcoded indices.
 """
 
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List
 
 import numpy as np
 

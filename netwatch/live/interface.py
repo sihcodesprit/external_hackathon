@@ -1,5 +1,6 @@
 """Linux network interface discovery."""
 
+import importlib.util
 import logging
 import os
 import platform
@@ -21,11 +22,8 @@ def discover_interfaces() -> list:
         return _discover_cross_platform()
 
     # Method 1: psutil
-    try:
-        import psutil
+    if importlib.util.find_spec("psutil") is not None:
         return _discover_psutil()
-    except ImportError:
-        pass
 
     # Method 2: /sys/class/net
     interfaces = _discover_sysfs()

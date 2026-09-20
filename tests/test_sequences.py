@@ -1,6 +1,5 @@
 """Unit tests for temporal sequence construction and splits."""
 
-import numpy as np
 import pytest
 
 from netwatch.features.network_state import NetworkState
@@ -64,7 +63,8 @@ def test_split_by_group():
 
 
 def test_build_seq_labels_alignment(norm_states):
-    norm = StateNormalizer(); norm.fit(norm_states)
+    norm = StateNormalizer()
+    norm.fit(norm_states)
     X, Y = build_sequences(norm_states, norm, sequence_length=8, horizon=1)
     labels = build_seq_labels(norm_states, sequence_length=8, horizon=1)
     assert len(X) == len(labels) == len(Y)

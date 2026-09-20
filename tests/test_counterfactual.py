@@ -6,11 +6,9 @@ discounts.
 """
 
 import numpy as np
-import pytest
 
 from netwatch.config import FEATURE_COLUMNS
 from netwatch.counterfactual.defensive_actions import (
-    ACTIONS,
     available_actions,
     get_action,
 )
@@ -86,8 +84,6 @@ def test_simulate_returns_trajectories():
 
 def test_recommend_prefers_lower_risk():
     engine, NetworkState = _build_engine()
-    history = [NetworkState(timestamp=f"t{i}", features={
-        c: 1.0 for c in FEATURE_COLUMNS}) for i in range(6)]
     # build a trivial simulation dict where block_source clearly wins
     sim = {
         "status": "ok",

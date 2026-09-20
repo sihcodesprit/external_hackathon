@@ -8,12 +8,11 @@ a sanity/baseline, not the primary model).
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict
 
 import numpy as np
 
 from netwatch.evaluation.metrics import evaluate_state_predictions
-from netwatch.forecasting.stage_predictor import StagePredictor
 from netwatch.models.baselines.benchmark import train_and_evaluate_baseline
 from netwatch.models.trainer import WorldModelTrainer
 
@@ -78,7 +77,6 @@ class ModelEvaluator:
             n = train_X.shape[0]
             split = int(n * (1 - val_fraction))
             X_tr, y_tr = train_X[:split], train_y[:split]
-            X_va, y_va = train_X[split:], train_y[split:]
             self.trainer.fit(X_tr, y_tr, val_fraction=val_fraction,
                              batch_size=32, epochs=30)
 

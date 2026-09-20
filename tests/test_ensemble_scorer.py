@@ -1,6 +1,7 @@
 """Tests for Ensemble Threat Scorer and multi-engine consensus."""
 
 import pytest
+
 from netwatch.features.network_state import NetworkState
 from netwatch.forecasting.ensemble_scorer import EnsembleScorer
 from netwatch.pipeline import Pipeline
@@ -12,12 +13,12 @@ def pipeline():
     pipe = Pipeline()
     pipe.load_data(n_traces=2, seed=42, duration_minutes=40.0)
     # Fast training for tests
-    train_states, val_states = pipe.states[:int(len(pipe.states)*0.8)], pipe.states[int(len(pipe.states)*0.8):]
+    train_states = pipe.states[:int(len(pipe.states)*0.8)]
     pipe.normalizer.fit(pipe.states)
     from netwatch.features.sequences import build_sequences
     X_train, Y_train = build_sequences(train_states, pipe.normalizer)
+    from netwatch.config import N_FEATURES, WORLD_MODEL_TYPE
     from netwatch.models.trainer import WorldModelTrainer
-    from netwatch.config import WORLD_MODEL_TYPE, N_FEATURES
     pipe.trainer = WorldModelTrainer(model_type=WORLD_MODEL_TYPE, n_features=N_FEATURES)
     pipe.trainer.fit(X_train, Y_train, val_fraction=0.1, batch_size=32, epochs=5)
     from netwatch.forecasting.attack_forecaster import AttackForecaster
@@ -30,12 +31,12 @@ def test_ensemble_scorer_basic(pipeline):
     """Test that ensemble scorer runs all 8 detectors and outputs valid consensus metrics."""
     scorer = EnsembleScorer(pipeline=pipeline)
     result = scorer.evaluate_traffic(states=pipeline.states, k_steps=5)
-    
+
     assert result["status"] == "ok"
     assert "consensus" in result
     assert "detectors" in result
     assert len(result["detectors"]) == 8
-    
+
     consensus = result["consensus"]
     assert 0.0 <= consensus["score"] <= 100.0
     assert consensus["threat_level"] in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "BENIGN")
@@ -71,13 +72,13 @@ def test_ensemble_scorer_reconnaissance_detection(pipeline):
         label=1,
         stage="Reconnaissance"
     )
-    
+
     scorer = EnsembleScorer(pipeline=pipeline)
     result = scorer.evaluate_traffic(states=[recon_state], k_steps=5)
-    
+
     assert result["status"] == "ok"
     consensus = result["consensus"]
-    
+
     # Should detect high or critical threat
     assert consensus["threat_level"] in ("CRITICAL", "HIGH", "MEDIUM")
     assert consensus["agreement_count"] >= 3

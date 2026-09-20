@@ -6,7 +6,7 @@ NetworkEvent objects before downstream processing. This prevents
 downstream modules from depending on a specific input format.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 

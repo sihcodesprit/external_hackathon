@@ -9,26 +9,25 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 
-from netwatch.live.tshark_locator import (
-    discover_candidates,
-    env_tshark_hint,
-    locate_tshark,
-    resolve_tshark,
-    validate_tshark,
-    get_tshark_version,
-    is_tshark_available,
-    find_tshark,
-    detect_tshark,
-    health_check,
-    get_tshark_capabilities,
-)
 from netwatch.live.tshark_command import (
     build_live_capture_command,
     build_version_command,
 )
+from netwatch.live.tshark_locator import (
+    detect_tshark,
+    discover_candidates,
+    env_tshark_hint,
+    find_tshark,
+    get_tshark_capabilities,
+    get_tshark_version,
+    health_check,
+    locate_tshark,
+    resolve_tshark,
+    validate_tshark,
+)
 from netwatch.live.tshark_runner import (
-    RealTsharkRunner,
     MockTsharkRunner,
+    RealTsharkRunner,
 )
 
 
@@ -70,15 +69,10 @@ class TestTsharkLocator:
 
     def test_locate_tshark_caches(self, monkeypatch):
         # Call twice, should be fast on second call
-        import time
-        start = time.time()
         p1 = locate_tshark("")
-        first = time.time() - start
-        
-        start = time.time()
+
         p2 = locate_tshark("")
-        second = time.time() - start
-        
+
         assert p1 == p2
         # Second call should be faster (cached)
         # Not strictly asserting timing but logic is there
@@ -93,7 +87,7 @@ class TestTsharkLocator:
     def test_find_tshark_shape(self):
         info = find_tshark("")
         assert set(info.keys()) >= {
-            "installed", "path", "version", "platform", 
+            "installed", "path", "version", "platform",
             "capture_available", "reason"
         }
         assert isinstance(info["installed"], bool)
@@ -171,13 +165,11 @@ class TestTsharkRunner:
     """Test the TsharkRunner interface and implementations."""
 
     def test_real_runner_interface(self):
-        from netwatch.live.tshark_runner import RealTsharkRunner
         runner = RealTsharkRunner()
         assert hasattr(runner, "launch")
         assert hasattr(runner, "terminate")
 
     def test_mock_runner(self):
-        from netwatch.live.tshark_runner import MockTsharkRunner
         runner = MockTsharkRunner(output_lines=["line1", "line2"], stderr_tail="error", exit_code=0)
         proc = runner.launch(["tshark", "--version"])
         assert runner.launched_commands == [["tshark", "--version"]]
@@ -189,13 +181,11 @@ class TestTsharkRunner:
         assert proc.poll() == 0
 
     def test_mock_runner_fail_on_launch(self):
-        from netwatch.live.tshark_runner import MockTsharkRunner
         runner = MockTsharkRunner(fail_on_launch=True)
         with pytest.raises(FileNotFoundError):
             runner.launch(["tshark", "--version"])
 
     def test_mock_runner_stderr(self):
-        from netwatch.live.tshark_runner import MockTsharkRunner
         runner = MockTsharkRunner(stderr_tail="some error output")
         proc = runner.launch(["tshark"])
         assert proc.stderr.read() == "some error output"

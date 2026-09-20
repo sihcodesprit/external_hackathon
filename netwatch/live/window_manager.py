@@ -5,7 +5,7 @@ import time
 from collections import deque
 from typing import List, Optional
 
-from netwatch.live.config import LIVE_WINDOW_SIZE, LIVE_STEP_SIZE, LIVE_MAX_EVENTS_PER_WINDOW
+from netwatch.live.config import LIVE_MAX_EVENTS_PER_WINDOW, LIVE_STEP_SIZE, LIVE_WINDOW_SIZE
 
 logger = logging.getLogger(__name__)
 

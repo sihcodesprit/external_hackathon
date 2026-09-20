@@ -14,18 +14,21 @@ from collections import deque
 from typing import Callable, Optional
 
 from netwatch.live.config import (
+    LIVE_EVENTS_PER_SECOND_LOG,
+    LIVE_MAX_EVENT_QUEUE,
     TSHARK_BPF_FILTER,
     TSHARK_OUTPUT_FORMAT,
+    TSHARK_PATH,
     TSHARK_PROMISCUOUS,
     TSHARK_SNAPLEN,
-    LIVE_MAX_EVENT_QUEUE,
-    LIVE_EVENTS_PER_SECOND_LOG,
 )
 from netwatch.live.tshark_command import (
     _validate_interface as _validate_interface_impl,
+)
+from netwatch.live.tshark_command import (
     build_live_capture_command,
 )
-from netwatch.live.tshark_locator import locate_tshark, validate_tshark
+from netwatch.live.tshark_locator import locate_tshark
 from netwatch.live.tshark_runner import RealTsharkRunner, TsharkRunner
 
 logger = logging.getLogger(__name__)

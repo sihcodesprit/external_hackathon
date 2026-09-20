@@ -17,7 +17,6 @@ actual model outputs.
 import datetime as _dt
 import json
 import logging
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,9 +24,7 @@ import numpy as np
 
 from netwatch.config import (
     DEFAULT_ACTIONS,
-    FEATURE_COLUMNS,
     K_STEP_HORIZON,
-    MODEL_DIR,
     N_FEATURES,
     REPORTS_DIR,
     SCALER_PATH,
@@ -44,19 +41,18 @@ from netwatch.features.network_state import StateBuilder
 from netwatch.features.sequences import (
     StateNormalizer,
     assign_labels_and_stages,
-    build_sequences,
     build_seq_labels,
-    split_by_group,
+    build_sequences,
     temporal_split,
 )
 from netwatch.forecasting.attack_forecaster import AttackForecaster
 from netwatch.forecasting.stage_predictor import StagePredictor
 from netwatch.ingestion.parser import ingest
-from netwatch.models.trainer import WorldModelTrainer
 from netwatch.mitre.attack_mapper import AttackMapper
-from netwatch.network.entities import EntityResolver, NetworkEntity
-from netwatch.network.graph import NetworkGraph
 from netwatch.models.registry import ModelRegistry
+from netwatch.models.trainer import WorldModelTrainer
+from netwatch.network.entities import EntityResolver
+from netwatch.network.graph import NetworkGraph
 
 logger = logging.getLogger(__name__)
 
@@ -406,7 +402,6 @@ class Pipeline:
 
             X_tr, Y_tr = build_sequences(train_states, self.normalizer)
             X_un, Y_un = build_sequences(unseen_states, self.normalizer)
-            bin_tr = _safe_bin(build_seq_labels(train_states))
             bin_un = _safe_bin(build_seq_labels(unseen_states))
             if X_tr.shape[0] and X_un.shape[0]:
                 result["unseen_attack"] = unseen.run(
@@ -516,7 +511,6 @@ class Pipeline:
 
     # ── persistence ────────────────────────────────────────
     def save_report(self) -> str:
-        from netwatch.config import REPORTS_DIR
         path = REPORTS_DIR / f"pipeline_report_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         path.write_text(json.dumps(self.results, default=str, indent=2))
         return str(path)

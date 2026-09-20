@@ -7,7 +7,7 @@ via configuration (config.yaml).
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -23,12 +23,12 @@ class FeatureGroup:
 @dataclass
 class FeatureRegistry:
     """Central registry of all feature groups and individual features."""
-    
+
     groups: Dict[str, FeatureGroup] = field(default_factory=dict)
-    
+
     def register_group(self, group: FeatureGroup):
         self.groups[group.name] = group
-    
+
     def get_enabled_features(self) -> List[str]:
         """Return flat list of all enabled feature names in canonical order."""
         features = []
@@ -37,12 +37,12 @@ class FeatureRegistry:
             if group and group.enabled:
                 features.extend(group.features)
         return features
-    
+
     def get_canonical_group_order(self) -> List[str]:
         """Canonical order for feature vector construction."""
         return [
             "traffic",
-            "packet", 
+            "packet",
             "flow",
             "tcp_handshake",
             "entropy",
@@ -52,19 +52,19 @@ class FeatureRegistry:
             "trajectory",
             "baseline_deviation",
         ]
-    
+
     def get_features_by_group(self, group_name: str) -> List[str]:
         group = self.groups.get(group_name)
         return group.features if group else []
-    
+
     def is_enabled(self, group_name: str) -> bool:
         group = self.groups.get(group_name)
         return group.enabled if group else False
-    
+
     def enable_group(self, group_name: str, enabled: bool = True):
         if group_name in self.groups and not self.groups[group_name].required:
             self.groups[group_name].enabled = enabled
-    
+
     def get_feature_metadata(self) -> Dict:
         """Return metadata for all features."""
         return {
@@ -89,7 +89,7 @@ REGISTRY.register_group(FeatureGroup(
     description="Aggregate traffic volume and rate features",
     features=[
         "total_packets",
-        "total_bytes", 
+        "total_bytes",
         "packet_rate",
         "byte_rate",
         "flow_rate",
@@ -132,7 +132,7 @@ REGISTRY.register_group(FeatureGroup(
     description="Bidirectional flow-level features",
     features=[
         "src_ip",
-        "dst_ip", 
+        "dst_ip",
         "src_port",
         "dst_port",
         "protocol",
@@ -141,7 +141,7 @@ REGISTRY.register_group(FeatureGroup(
         "packets",
         "duration",
         "iat_mean",
-        "iat_variance", 
+        "iat_variance",
         "iat_max",
         "fwd_packets",
         "bwd_packets",
@@ -158,12 +158,12 @@ REGISTRY.register_group(FeatureGroup(
     description="TCP handshake asymmetry and ghost ratio features",
     features=[
         "syn_count",
-        "syn_ack_count", 
+        "syn_ack_count",
         "ack_count",
         "rst_count",
         "fin_count",
         "syn_ack_ratio",
-        "syn_synack_ratio", 
+        "syn_synack_ratio",
         "rst_syn_ratio",
         "half_open_ratio",
         "ack_completion_ratio",
@@ -182,7 +182,7 @@ REGISTRY.register_group(FeatureGroup(
         "src_port_entropy",
         "dst_port_entropy",
         "protocol_entropy",
-        "dst_ip_entropy", 
+        "dst_ip_entropy",
         "src_ip_entropy",
         "payload_size_entropy",
         "packet_size_entropy",
@@ -191,7 +191,7 @@ REGISTRY.register_group(FeatureGroup(
         "port_entropy_delta",
         "port_entropy_acceleration",
         "dst_entropy_delta",
-        "dst_entropy_acceleration", 
+        "dst_entropy_acceleration",
         "payload_entropy_delta",
         "payload_entropy_acceleration",
     ],
@@ -232,7 +232,7 @@ REGISTRY.register_group(FeatureGroup(
         "new_destinations",
         "new_sources",
         "eigenvector_centrality_max",
-        "betweenness_centrality_max", 
+        "betweenness_centrality_max",
         "pagerank_max",
         "density_delta",
         "degree_delta",
@@ -263,7 +263,7 @@ REGISTRY.register_group(FeatureGroup(
     features=[
         "syn_rate_delta",
         "syn_rate_acceleration",
-        "port_entropy_delta", 
+        "port_entropy_delta",
         "port_entropy_acceleration",
         "graph_density_delta",
         "graph_density_acceleration",
@@ -283,14 +283,14 @@ REGISTRY.register_group(FeatureGroup(
     features=[
         "syn_rate_zscore",
         "port_entropy_zscore",
-        "packet_rate_zscore", 
+        "packet_rate_zscore",
         "graph_density_zscore",
         "syn_rate_percentile",
         "port_entropy_percentile",
         "packet_rate_percentile",
         "graph_density_percentile",
         "syn_rate_deviation",
-        "port_entropy_deviation", 
+        "port_entropy_deviation",
         "packet_rate_deviation",
         "graph_density_deviation",
     ],
@@ -301,7 +301,7 @@ REGISTRY.register_group(FeatureGroup(
 def build_registry_from_config(config: Dict) -> FeatureRegistry:
     """Build a feature registry from a configuration dict."""
     registry = FeatureRegistry()
-    
+
     # Copy base groups
     for group_name in REGISTRY.get_canonical_group_order():
         base_group = REGISTRY.groups.get(group_name)

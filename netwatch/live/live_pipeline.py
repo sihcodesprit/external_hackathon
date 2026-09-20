@@ -4,12 +4,12 @@ import logging
 import time
 from collections import deque
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
 
+from netwatch.ingestion.parser import PacketRecord
 from netwatch.live.config import (
-    LIVE_FORECAST_HORIZON,
     LIVE_MAX_STATE_HISTORY,
     LIVE_MIN_STATES_FOR_MODEL,
     LIVE_MODEL_REFIT_INTERVAL,
@@ -19,7 +19,6 @@ from netwatch.live.flow_tracker import FlowTracker
 from netwatch.live.live_state import LiveAnalysisState, LiveStatus
 from netwatch.live.normalizer import event_to_packet_record
 from netwatch.live.window_manager import WindowManager
-from netwatch.ingestion.parser import PacketRecord
 
 logger = logging.getLogger(__name__)
 
@@ -267,11 +266,12 @@ class LivePipeline:
     def _fit_world_model(self):
         """Fit/re-fit the world model on current state history."""
         try:
+            from netwatch.config import SEQUENCE_LENGTH, get_feature_columns
             from netwatch.features.sequences import (
-                StateNormalizer, build_sequences, assign_labels_and_stages,
+                assign_labels_and_stages,
+                build_sequences,
             )
             from netwatch.models.trainer import WorldModelTrainer
-            from netwatch.config import SEQUENCE_LENGTH, get_feature_columns
 
             states = self._pipeline.states
             if len(states) < 3:
@@ -405,8 +405,8 @@ class LivePipeline:
 
         # Counterfactual
         try:
-            from netwatch.counterfactual.simulator import CounterfactualEngine
             from netwatch.config import DEFAULT_ACTIONS
+            from netwatch.counterfactual.simulator import CounterfactualEngine
             engine = CounterfactualEngine(
                 pipe.trainer.model, pipe.attack_forecaster,
                 pipe.normalizer, feature_columns=pipe.feature_columns,

@@ -14,7 +14,7 @@ import logging
 import re
 import socket
 import urllib.parse
-from typing import Dict, List, Optional, Set
+from typing import List, Optional, Set
 
 logger = logging.getLogger(__name__)
 

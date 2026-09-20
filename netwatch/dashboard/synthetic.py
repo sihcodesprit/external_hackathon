@@ -73,7 +73,6 @@ def _dos(index, host, dport, stage="Impact"):
 
 def generate_scenario(name: str, seed: int = 42) -> list:
     """Generate a labelled synthetic traffic list for the named scenario."""
-    rng = random.Random(seed)
     records = []
 
     if name == "benign":
@@ -118,7 +117,6 @@ def generate_scenario(name: str, seed: int = 42) -> list:
         raise ValueError(f"Unknown scenario: {name}")
 
     records.sort(key=lambda r: r["timestamp"])
-    from netwatch.ingestion.parser import PacketRecord
     return [PacketRecord(**r) for r in records]
 
 

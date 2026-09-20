@@ -5,7 +5,7 @@ import threading
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 
 from netwatch.live.config import (
     LIVE_DASHBOARD_UPDATE_INTERVAL,

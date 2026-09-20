@@ -18,7 +18,6 @@ Serves the React SPA + JSON API:
  14. Report Export
 """
 
-import functools
 import gzip
 import json
 import logging
@@ -29,12 +28,12 @@ import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
+
+from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
-from flask import Flask, jsonify, request, send_from_directory, abort
-
 from netwatch import __version__
-from netwatch.config import DASHBOARD_DEBUG, DASHBOARD_PORT, DASHBOARD_HOST
+from netwatch.config import DASHBOARD_DEBUG, DASHBOARD_HOST, DASHBOARD_PORT
 from netwatch.ingestion.parser import ingest
 from netwatch.pipeline import Pipeline
 
@@ -107,7 +106,7 @@ def _ensure_prewarm() -> None:
         """Import heavy request-time modules up-front so the first interaction
         (page load, analysis run, live capture) never blocks on imports."""
         try:
-            from netwatch.live import interface, manager, health as _live_health  # noqa: F401
+            from netwatch.live import interface, manager  # noqa: F401
         except Exception as e:  # noqa: BLE001
             logger.warning("Live monitoring preload failed: %s", e)
         try:
@@ -116,8 +115,8 @@ def _ensure_prewarm() -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("Analysis preload failed: %s", e)
         try:
-            from netwatch.forecasting.ensemble_scorer import EnsembleScorer  # noqa: F401
             from netwatch.counterfactual.simulator import CounterfactualEngine  # noqa: F401
+            from netwatch.forecasting.ensemble_scorer import EnsembleScorer  # noqa: F401
         except Exception as e:  # noqa: BLE001
             logger.warning("Forecast/counterfactual preload failed: %s", e)
 
@@ -172,8 +171,8 @@ def _clean_predefined_artifacts() -> None:
     if _ARTIFACTS_CLEANED:
         return
     _ARTIFACTS_CLEANED = True
-    from netwatch.models.registry import CHECKPOINTS_DIR
     from netwatch.config import MODEL_DIR
+    from netwatch.models.registry import CHECKPOINTS_DIR
     dirs = (MODEL_DIR, CHECKPOINTS_DIR)
     bundled_names = (
         "world_model_lstm.pt",      # shipped LSTM snapshot (now bundled no-op)
@@ -303,7 +302,6 @@ def _model_test_update(job_id: str, **kwargs):
 
 def _new_model_test_job() -> str:
     """Create a backend-owned model test job and return its id."""
-    from netwatch.dashboard.analysis import run_module_test
     pipe = _build_pipeline_unlocked()
     records = _get_last_records() or []
 
@@ -1135,10 +1133,11 @@ def create_app():
     @app.route("/api/system/dependencies")
     def api_system_dependencies():
         """Report Python, TShark and live capture availability."""
-        import sys
         import platform
-        from netwatch.live.tshark_locator import get_tshark_capabilities
+        import sys
+
         from netwatch.live.interface import discover_interfaces
+        from netwatch.live.tshark_locator import get_tshark_capabilities
 
         python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         tshark = get_tshark_capabilities()
@@ -1171,8 +1170,8 @@ def create_app():
     @app.route("/api/live/health")
     def api_live_health():
         """Check TShark availability and version."""
-        from netwatch.live.health import detect_tshark
         from netwatch.live.config import TSHARK_PATH
+        from netwatch.live.health import detect_tshark
         return jsonify(detect_tshark(TSHARK_PATH))
 
     @app.route("/api/live/interfaces")
@@ -1191,12 +1190,14 @@ def create_app():
     @app.route("/api/live/start", methods=["POST"])
     def api_live_start():
         """Start a live TShark capture session."""
-        from netwatch.live.manager import LiveManager
         from netwatch.live.config import (
-            LIVE_DEFAULT_INTERFACE, LIVE_WINDOW_SIZE,
-            LIVE_STEP_SIZE, LIVE_FORECAST_HORIZON,
+            LIVE_DEFAULT_INTERFACE,
+            LIVE_FORECAST_HORIZON,
+            LIVE_STEP_SIZE,
+            LIVE_WINDOW_SIZE,
         )
         from netwatch.live.interface import discover_interfaces
+        from netwatch.live.manager import LiveManager
         data = {}
         try:
             data = request.get_json(force=True) or {}
@@ -1278,12 +1279,14 @@ def create_app():
     @app.route("/api/live/url/start", methods=["POST"])
     def api_live_url_start():
         """Start a live URL-target monitoring session (DNS resolve + TShark)."""
-        from netwatch.live.manager import LiveManager
         from netwatch.live.config import (
-            LIVE_DEFAULT_INTERFACE, LIVE_WINDOW_SIZE,
-            LIVE_STEP_SIZE, LIVE_FORECAST_HORIZON,
+            LIVE_DEFAULT_INTERFACE,
+            LIVE_FORECAST_HORIZON,
+            LIVE_STEP_SIZE,
             LIVE_URL_ALLOW_PRIVATE_HOSTS,
+            LIVE_WINDOW_SIZE,
         )
+        from netwatch.live.manager import LiveManager
         data = request.get_json(force=True, silent=True) or {}
         url = data.get("url")
         if not url or not isinstance(url, str):
@@ -1377,7 +1380,9 @@ def create_app():
     def api_live_events():
         """SSE stream of live dashboard updates (EventSource / text/event-stream)."""
         import queue
+
         from flask import Response, stream_with_context
+
         from netwatch.live.manager import LiveManager
 
         mgr = LiveManager()

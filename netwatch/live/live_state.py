@@ -4,7 +4,7 @@ import time
 import uuid
 from collections import deque
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 
 class LiveStatus:
@@ -225,7 +225,7 @@ class LiveAnalysisState:
             "future": self.forecast.get("future", []),
             "temporal_explanation": self.forecast.get("temporal_explanation", {}),
         }
-        return {
+        doc = {
             "status": "ok",
             "type": "live_traffic",
             "analysis_id": self.analysis_id,

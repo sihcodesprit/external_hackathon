@@ -11,7 +11,6 @@ Includes standard-library fallback for zero-dependency portability.
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 import urllib.parse
@@ -123,7 +122,7 @@ def render_html(message_html: str = "") -> str:
 
 
 # ── Zero-dependency Standard Library HTTP Server ─────────────────────────────
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
 

@@ -55,9 +55,9 @@ class LinearWorldModel(WorldModel):
         return results
 
     def save(self, path: str):
-        import os
         import json
-        import numpy as np
+        import os
+
         os.makedirs(os.path.dirname(path), exist_ok=True)
         data = {
             "W": self.W.tolist() if self.W is not None else None,
@@ -68,8 +68,9 @@ class LinearWorldModel(WorldModel):
             json.dump(data, f)
 
     def load(self, path: str) -> bool:
-        import os
         import json
+        import os
+
         import numpy as np
         if not os.path.exists(path):
             return False

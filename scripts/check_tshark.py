@@ -29,42 +29,42 @@ def main() -> int:
     print()
 
     # Operating System
-    print(f"Operating System:")
+    print("Operating System:")
     print(f"  {platform.system()} {platform.release()} ({platform.machine()})")
     print()
 
     # Python
-    print(f"Python:")
+    print("Python:")
     print(f"  {sys.version.split()[0]} ({platform.python_implementation()})")
     print()
 
     # TShark
-    print(f"TShark:")
+    print("TShark:")
     info = detect_tshark(TSHARK_PATH)
     if info.get("available"):
-        print(f"  AVAILABLE")
+        print("  AVAILABLE")
     elif info.get("installed"):
-        print(f"  INSTALLED (capture unavailable)")
+        print("  INSTALLED (capture unavailable)")
     else:
-        print(f"  NOT AVAILABLE")
+        print("  NOT AVAILABLE")
 
     if info.get("path"):
-        print(f"TShark Path:")
+        print("TShark Path:")
         print(f"  {info['path']}")
 
     if info.get("version"):
-        print(f"TShark Version:")
+        print("TShark Version:")
         print(f"  {info['version']}")
 
-    print(f"Platform:")
+    print("Platform:")
     print(f"  {info.get('platform', 'unknown')}")
 
     if info.get("reason"):
-        print(f"Reason:")
+        print("Reason:")
         print(f"  {info['reason']}")
 
     if info.get("error"):
-        print(f"Error:")
+        print("Error:")
         print(f"  {info['error']}")
 
     print()
@@ -72,26 +72,26 @@ def main() -> int:
     # Live capture capability
     caps = get_tshark_capabilities(TSHARK_PATH)
     if caps.get("available"):
-        print(f"Live Capture:")
-        print(f"  READY")
+        print("Live Capture:")
+        print("  READY")
     else:
-        print(f"Live Capture:")
-        print(f"  NOT READY")
+        print("Live Capture:")
+        print("  NOT READY")
         if caps.get("reason"):
             print(f"  Reason: {caps['reason']}")
 
     print()
 
     # PATH / configuration
-    print(f"PATH Configuration:")
+    print("PATH Configuration:")
     if TSHARK_PATH:
         print(f"  TSHARK_PATH set explicitly: {TSHARK_PATH}")
     else:
-        print(f"  Auto-discovery mode (TSHARK_PATH not set)")
+        print("  Auto-discovery mode (TSHARK_PATH not set)")
     print()
 
     # Available interfaces
-    print(f"Available Interfaces:")
+    print("Available Interfaces:")
     ifaces = discover_interfaces()
     up_ifaces = [i for i in ifaces if str(i.get("state", "")).upper() == "UP" and not i.get("is_loopback", False)]
     if up_ifaces:
@@ -100,11 +100,11 @@ def main() -> int:
             addr_str = addrs[0].get("addr") if addrs else "no IP"
             print(f"  * {i['name']} ({addr_str})")
     else:
-        print(f"  (none suitable for capture)")
+        print("  (none suitable for capture)")
     print()
 
     # Live config summary
-    print(f"Live Pipeline Config:")
+    print("Live Pipeline Config:")
     print(f"  Enabled: {LIVE_ENABLED}")
     print(f"  Window: {LIVE_WINDOW_SIZE}s, Step: {LIVE_STEP_SIZE}s, Horizon: {LIVE_FORECAST_HORIZON} steps")
     print()

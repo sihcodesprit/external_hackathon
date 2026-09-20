@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import List
 
-from netwatch.ingestion.parser import PacketRecord, normalize_packet_dict
+from netwatch.ingestion.parser import PacketRecord
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,6 @@ class CTU13Adapter(DatasetAdapter):
                         duration=float(row.get("Dur", 0.0) or 0.0),
                         packets=int(row.get("TotPkts", 0) or 0),
                         bytes_sent=int(row.get("TotBytes", 0) or 0),
-                        src_ip="",
                     )
                     records.append(rec)
                 except Exception as e:

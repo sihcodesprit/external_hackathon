@@ -18,15 +18,15 @@ All metrics and numbers are computed from actual traffic data.
 """
 
 import logging
-from typing import Dict, List, Optional, Any
-import numpy as np
+from typing import Any, Dict, List, Optional
 
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+import numpy as np
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
-from netwatch.features.network_state import NetworkState, StateBuilder
 from netwatch.features.entropy_features import shannon_entropy
+from netwatch.features.network_state import NetworkState, StateBuilder
 from netwatch.forecasting.stage_predictor import StagePredictor, heuristic_stage
 from netwatch.mitre.attack_mapper import AttackMapper
 
@@ -46,7 +46,7 @@ class EnsembleScorer:
         self._lr_model = None
         self._scaler = StandardScaler()
         self._ml_trained = False
-        
+
         # Try loading saved baselines if path provided or default exists
         if baselines_path:
             self.load_baselines(baselines_path)
@@ -101,26 +101,26 @@ class EnsembleScorer:
         try:
             if len(states) < 4:
                 return
-            
+
             X = np.nan_to_num(
                 np.array([self.pipeline.normalizer.transform(s) for s in states],
                          dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
             y = np.array([1 if (s.label is not None and s.label == 1) else 0 for s in states])
-            
+
             if len(np.unique(y)) < 2:
                 y = np.array([1 if heuristic_stage(s.features) != "Benign" else 0 for s in states])
-            
+
             if len(np.unique(y)) >= 2:
                 self._rf_model = RandomForestClassifier(n_estimators=100, random_state=42, max_depth=6)
                 self._rf_model.fit(X, y)
-                
+
                 self._gbm_model = GradientBoostingClassifier(n_estimators=100, random_state=42, max_depth=3)
                 self._gbm_model.fit(X, y)
-                
+
                 self._lr_model = LogisticRegression(max_iter=1000, random_state=42)
                 X_scaled = self._scaler.fit_transform(X)
                 self._lr_model.fit(X_scaled, y)
-                
+
                 self._ml_trained = True
         except Exception as e:
             logger.warning(f"Could not train ML baselines for EnsembleScorer: {e}")
@@ -135,7 +135,7 @@ class EnsembleScorer:
         if not states and records:
             builder = StateBuilder(group_by_pair=False)
             states = builder.build_states(records)
-            
+
         if not states:
             return {"error": "No valid network states provided for evaluation"}
 
@@ -147,25 +147,25 @@ class EnsembleScorer:
 
         # 1. Evaluate LSTM Cyber World Model
         wm_res = self._eval_world_model(states, k_steps)
-        
+
         # 2. Evaluate Random Forest Classifier
         rf_res = self._eval_random_forest(latest_state, raw_features)
-        
+
         # 3. Evaluate Gradient Boosting Classifier
         gbm_res = self._eval_gradient_boosting(latest_state, raw_features)
-        
+
         # 4. Evaluate Calibrated Logistic Regression Baseline
         lr_res = self._eval_logistic_regression(latest_state, raw_features)
-        
+
         # 5. Evaluate Shannon Entropy & Port/IP Dispersion Engine
         entropy_res = self._eval_entropy_engine(records, raw_features)
-        
+
         # 6. Evaluate TCP Handshake & Asymmetry Engine
         tcp_res = self._eval_tcp_dynamics(records, raw_features)
-        
+
         # 7. Evaluate Dynamic Graph Topology & Scanner Entity Engine
         graph_res = self._eval_graph_topology(records, raw_features)
-        
+
         # 8. Evaluate MITRE ATT&CK Heuristic & Signature Engine
         mitre_res = self._eval_mitre_heuristics(raw_features)
 
@@ -223,7 +223,7 @@ class EnsembleScorer:
         consensus_stage = mitre_res.get("detected_stage", "Reconnaissance")
         if consensus_stage == "Benign" and weighted_score >= 0.4:
             consensus_stage = wm_res.get("projected_stage", "Reconnaissance")
-            
+
         mitre_mapping = self.attack_mapper.map(consensus_stage)
 
         verdict_summary = self._generate_verdict_summary(
@@ -284,7 +284,7 @@ class EnsembleScorer:
                 future_risks = [float(st.get("risk", 0.0)) for st in fc.get("future", [])]
                 peak_risk = max([curr_risk] + future_risks) if future_risks else curr_risk
                 stage = fc["current"].get("stage", "Benign")
-                
+
                 if future_risks and future_risks[-1] > curr_risk + 0.05:
                     trend = f"Escalating (+{(future_risks[-1] - curr_risk)*100:.1f}%)"
                 elif future_risks and future_risks[-1] < curr_risk - 0.05:
@@ -477,7 +477,7 @@ class EnsembleScorer:
         """Shannon Entropy & Port/IP dispersion engine."""
         port_ent = raw.get("port_entropy", 0.0)
         dst_ports = raw.get("unique_dst_ports", 0.0)
-        
+
         if records:
             ports = [getattr(r, "dst_port", None) or (r.get("dst_port", 0) if isinstance(r, dict) else 0) for r in records if (getattr(r, "dst_port", None) or (isinstance(r, dict) and r.get("dst_port")))]
             if ports:
@@ -582,7 +582,7 @@ class EnsembleScorer:
     def _eval_graph_topology(self, records: Optional[List[Any]], raw: Dict[str, float]) -> Dict[str, Any]:
         """Dynamic Network Graph & Scanner Entity resolution."""
         dst_hosts = raw.get("unique_dst_hosts", 0.0)
-        
+
         fan_out = 0
         scanner_ip = None
         if records:
@@ -714,8 +714,8 @@ class EnsembleScorer:
         # Check if pipeline CounterfactualEngine is available to compute actual simulation
         if self.pipeline and hasattr(self.pipeline, "attack_forecaster") and self.pipeline.attack_forecaster:
             try:
-                from netwatch.counterfactual.simulator import CounterfactualEngine
                 from netwatch.config import DEFAULT_ACTIONS
+                from netwatch.counterfactual.simulator import CounterfactualEngine
                 history = states[-10:] if len(states) >= 10 else states
                 engine = CounterfactualEngine(
                     self.pipeline.trainer.model, self.pipeline.attack_forecaster, self.pipeline.normalizer,
@@ -723,15 +723,15 @@ class EnsembleScorer:
                 )
                 sim = engine.simulate(history, actions=DEFAULT_ACTIONS, k=k_steps)
                 rec = engine.recommend(sim)
-                
+
                 no_act = sim["results"].get("no_action", {})
                 rec_act = sim["results"].get(rec["recommended_action"], {})
-                
+
                 initial_peak = no_act.get("peak_risk", weighted_score)
                 mitigated_peak = rec_act.get("peak_risk", initial_peak)
-                
+
                 reduction = max(0.0, (initial_peak - mitigated_peak) / max(initial_peak, 0.001)) * 100.0
-                
+
                 return {
                     "recommended_action": rec["recommended_action"],
                     "action_label": rec["recommended_label"],

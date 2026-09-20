@@ -20,10 +20,11 @@ from netwatch.pipeline import Pipeline
 @pytest.fixture()
 def pipe(monkeypatch):
     from datetime import datetime, timedelta
+
     from netwatch.ingestion.parser import PacketRecord
     monkeypatch.setattr(pipeline_mod, "WORLD_MODEL_TYPE", "linear")
     pipe = Pipeline()
-    
+
     base = datetime(2026, 9, 1, 12, 0, 0)
     records = []
     for i in range(160):

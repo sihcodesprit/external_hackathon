@@ -1,14 +1,14 @@
 """
 Shared configuration for the Counterfactual Cyber World Model.
 
-All paths, hyperparameters, and runtime feature flags live here. 
+All paths, hyperparameters, and runtime feature flags live here.
 Loads from configs/config.yaml with environment variable overrides.
 Nothing here depends on external submodules.
 """
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import yaml
 
