@@ -42,7 +42,13 @@ jobs:
             --ignore=tests/test_end_to_end.py \
             --ignore=tests/test_ensemble_scorer.py \
             --ignore=tests/test_netwatch_core.py \
-            --tb=short
+            --tb=short > /tmp/pytest_out.txt 2>&1; status=$?
+          if [ $status -ne 0 ]; then
+            echo "::group::pytest failed output"
+            tail -60 /tmp/pytest_out.txt | sed 's/^/::error::/'
+            echo "::endgroup::"
+          fi
+          exit $status
 
   # ────────────────────────────────────────────────────────────────
   # TShark integration tests (run only when TShark is available)
