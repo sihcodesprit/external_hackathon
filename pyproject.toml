@@ -19,6 +19,7 @@ addopts = "-v --tb=short"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests",
+    "tshark_integration: marks tests requiring TShark + capture permissions",
 ]
 
 [tool.coverage.run]
