@@ -1,6 +1,6 @@
 """Unit tests for feature extraction and NetworkState construction."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -32,7 +32,7 @@ def _record(ts, src="1.1.1.1", dst="2.2.2.2", dport=80, flags="A",
 
 
 def test_compute_window_features_shape():
-    base = datetime.now(UTC)
+    base = datetime.now(timezone.utc)
     pkts = [_record(_ts(base, i)) for i in range(60)]
     feats = compute_window_features(pkts)
     # basic features from compute_window_features
@@ -51,7 +51,7 @@ def test_compute_window_features_shape():
 
 
 def test_compute_window_features_flags_and_ports():
-    base = datetime.now(UTC)
+    base = datetime.now(timezone.utc)
     pkts = []
     for i, (flags, dport) in enumerate([("S", 22), ("S", 23), ("S", 80),
                                         ("SA", 443), ("R", 22)]):
@@ -65,7 +65,7 @@ def test_compute_window_features_flags_and_ports():
 
 
 def test_state_builder_creates_ordered_states():
-    base = datetime.now(UTC)
+    base = datetime.now(timezone.utc)
     pkts = [_record(_ts(base, i * 1.0), dport=(80 if i % 2 else 443))
             for i in range(200)]  # ~200s of traffic
     states = StateBuilder(window_seconds=30, window_step=10,
@@ -79,7 +79,7 @@ def test_state_builder_creates_ordered_states():
 
 
 def test_state_vector_uses_feature_columns():
-    base = datetime.now(UTC)
+    base = datetime.now(timezone.utc)
     states = StateBuilder(window_seconds=30, window_step=10,
                           group_by_pair=False).build_states(
         [_record(_ts(base, i)) for i in range(60)])
@@ -88,7 +88,7 @@ def test_state_vector_uses_feature_columns():
 
 
 def test_state_builder_groups_by_pair():
-    base = datetime.now(UTC)
+    base = datetime.now(timezone.utc)
     pkts = [_record(_ts(base, i), src="1.1.1.1", dst="2.2.2.2") for i in range(50)]
     pkts += [_record(_ts(base, i), src="3.3.3.3", dst="4.4.4.4") for i in range(50)]
     states = StateBuilder(window_seconds=30, window_step=10,
