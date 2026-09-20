@@ -7,28 +7,29 @@ import { Card, Grid } from "../components/ui/primitives";
 import { MetricCard } from "../components/ui/displays";
 import { ForecastTimeline } from "../components/charts/ForecastTimeline";
 import { RadarChart, DetectorList } from "../components/charts/RadarChart";
-import { CounterfactualPanel } from "../components/counterfactual/CounterfactualPanel";
 import { fmtInt } from "../utils/format";
 import { Button } from "../components/ui/Button";
 
-export default function Overview() {
+export default function Overview({ bare = false }: { bare?: boolean } = {}) {
   const { doc, clear } = useAnalysis();
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, letterSpacing: 0.2 }}>Live Threat Overview</h1>
-          <p style={{ fontSize: 12.5, color: palette.textMuted, marginTop: 4 }}>
-            Real forecasts derived from the LSTM world model, ensemble threat scoring and MITRE mapping.
-          </p>
+      {!bare && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, letterSpacing: 0.2 }}>Live Threat Overview</h1>
+            <p style={{ fontSize: 12.5, color: palette.textMuted, marginTop: 4 }}>
+              Real forecasts derived from the LSTM world model, ensemble threat scoring and MITRE mapping.
+            </p>
+          </div>
+          {doc && (
+            <Button variant="ghost" size="sm" onClick={clear}>
+              Clear analysis
+            </Button>
+          )}
         </div>
-        {doc && (
-          <Button variant="ghost" size="sm" onClick={clear}>
-            Clear analysis
-          </Button>
-        )}
-      </div>
+      )}
 
       <RequireAnalysis>
         {(doc) => (
@@ -57,8 +58,6 @@ export default function Overview() {
                 {doc.ensemble?.radar_data ? <RadarChart radar={doc.ensemble.radar_data} /> : null}
               </Card>
             </Grid>
-
-            <CounterfactualPanel doc={doc} compact />
           </div>
         )}
       </RequireAnalysis>

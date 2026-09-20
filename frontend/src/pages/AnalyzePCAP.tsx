@@ -7,17 +7,21 @@ import { Card } from "../components/ui/primitives";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 
-export default function AnalyzePCAP() {
+export default function AnalyzePCAP({ bare = false }: { bare?: boolean } = {}) {
   const { doc, job, running, status, error } = useAnalysis();
   const navigate = useNavigate();
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Analyze PCAP</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Upload a raw capture and the engine ingests it, builds network states, forecasts the assault
-        trajectory and runs the threat ensemble — with live progress.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Analyze PCAP</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Upload a raw capture and the engine ingests it, builds network states, forecasts the assault
+            trajectory and runs the threat ensemble — with live progress.
+          </p>
+        </>
+      )}
 
       <FileUploader />
 
@@ -49,7 +53,7 @@ export default function AnalyzePCAP() {
             <TrafficSummary summary={doc.traffic_summary} />
             <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
               <Button onClick={() => navigate("/")}>View overview</Button>
-              <Button variant="outline" onClick={() => navigate("/forecast")}>Open forecast</Button>
+              <Button variant="outline" onClick={() => navigate("/analysis?tab=forecast")}>Open forecast</Button>
             </div>
           </Card>
         </div>

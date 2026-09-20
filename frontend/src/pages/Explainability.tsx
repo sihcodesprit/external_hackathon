@@ -10,7 +10,7 @@ interface Contrib {
   sign?: string;
 }
 
-export default function Explainability() {
+export default function Explainability({ bare = false }: { bare?: boolean } = {}) {
   const { doc } = useAnalysis();
   const cur = doc?.forecast?.current;
   const expl = cur?.explanation as
@@ -33,10 +33,14 @@ export default function Explainability() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Explainability</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        SHAP-based attribution of the current forecast and temporal evolution of the driving features.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Explainability</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            SHAP-based attribution of the current forecast and temporal evolution of the driving features.
+          </p>
+        </>
+      )}
 
       <RequireAnalysis>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

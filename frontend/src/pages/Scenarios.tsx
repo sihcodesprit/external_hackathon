@@ -7,21 +7,28 @@ import { Card, Pill, Grid, Tag } from "../components/ui/primitives";
 import { Button } from "../components/ui/Button";
 import { ErrorState, PageLoader } from "../components/ui/displays";
 
-export default function Scenarios() {
+export default function Scenarios({ bare = false }: { bare?: boolean } = {}) {
   const { data, loading, error } = useFetch(() => api.scenarios(), []);
-  const { startScenario, running } = useAnalysis();
+  const { startScenario, running, sourceLabel } = useAnalysis();
   const scenarios: ScenarioInfo[] = data ?? [];
 
   const activeKind = ["benign", "recon", "bruteforce", "dos", "mixed"];
 
+  const activeScenario =
+    running && sourceLabel?.startsWith("scenario:") ? sourceLabel.slice("scenario:".length) : null;
+
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Attack Scenarios</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Built-in demos that feed the engine with{" "}
-        <span style={{ color: palette.warn, fontWeight: 650 }}>clearly-labelled SYNTHETIC DATA</span> —
-        they are generated traces and are never presented as live captures.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Attack Scenarios</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Built-in demos that feed the engine with{" "}
+            <span style={{ color: palette.warn, fontWeight: 650 }}>clearly-labelled SYNTHETIC DATA</span> —
+            they are generated traces and are never presented as live captures.
+          </p>
+        </>
+      )}
 
       <div style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: 8, border: `1px solid ${palette.warn}40`, background: `${palette.warn}10` }}>
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: palette.warn }} />
@@ -55,10 +62,10 @@ export default function Scenarios() {
                   size="sm"
                   onClick={() => startScenario(s.id)}
                   disabled={running}
-                  loading={running}
+                  loading={activeScenario === s.id}
                   variant={activeKind.includes(s.id) && i % 2 === 1 ? "outline" : "primary"}
                 >
-                  {running ? "Running…" : "Run scenario"}
+                  {activeScenario === s.id ? "Running…" : "Run scenario"}
                 </Button>
               </div>
             </Card>

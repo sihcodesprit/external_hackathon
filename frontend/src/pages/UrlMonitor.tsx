@@ -65,7 +65,7 @@ const timelineColor = (type: string): string => {
   }
 };
 
-export default function UrlMonitor() {
+export default function UrlMonitor({ bare = false }: { bare?: boolean } = {}) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [health, setHealth] = useState<LiveHealthInfo | null>(null);
   const [interfaces, setInterfaces] = useState<LiveInterface[]>([]);
@@ -183,7 +183,7 @@ export default function UrlMonitor() {
     const names = [
       "url_status", "dns", "connection", "traffic", "flow",
       "network_state", "risk", "forecast", "stage", "graph",
-      "mitre", "explainability", "counterfactual",
+      "mitre", "explainability",
     ];
     const onNamed = (name: string) => (ev: MessageEvent) => {
       try {
@@ -295,15 +295,17 @@ export default function UrlMonitor() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, letterSpacing: 0.2 }}>
-            URL Transmission Monitor
-          </h1>
-          <p style={{ fontSize: 12.5, color: palette.textMuted, marginTop: 4 }}>
-            Resolves a URL to its destination infrastructure and observes real local network
-            transmission with TShark. This is a network monitor — not a website content scraper.
-          </p>
-        </div>
+        {!bare && (
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, letterSpacing: 0.2 }}>
+              URL Transmission Monitor
+            </h1>
+            <p style={{ fontSize: 12.5, color: palette.textMuted, marginTop: 4 }}>
+              Resolves a URL to its destination infrastructure and observes real local network
+              transmission with TShark. This is a network monitor — not a website content scraper.
+            </p>
+          </div>
+        )}
         {phase === "capturing" ? (
           <Button variant="danger" size="sm" onClick={stop}>STOP</Button>
         ) : (

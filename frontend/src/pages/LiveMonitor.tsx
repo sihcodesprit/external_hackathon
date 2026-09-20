@@ -29,7 +29,7 @@ const statusTone = (s: string): "default" | "accent" | "good" | "warn" | "danger
   }
 };
 
-export default function LiveMonitor() {
+export default function LiveMonitor({ bare = false }: { bare?: boolean } = {}) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [health, setHealth] = useState<LiveHealthInfo | null>(null);
   const [interfaces, setInterfaces] = useState<LiveInterface[]>([]);
@@ -170,14 +170,16 @@ export default function LiveMonitor() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, letterSpacing: 0.2 }}>
-            Live TShark Monitor
-          </h1>
-          <p style={{ fontSize: 12.5, color: palette.textMuted, marginTop: 4 }}>
-            Real-time packet capture via TShark (Threadripper JSON) with live world-model forecasting.
-          </p>
-        </div>
+        {!bare && (
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, letterSpacing: 0.2 }}>
+              Live TShark Monitor
+            </h1>
+            <p style={{ fontSize: 12.5, color: palette.textMuted, marginTop: 4 }}>
+              Real-time packet capture via TShark (Threadripper JSON) with live world-model forecasting.
+            </p>
+          </div>
+        )}
         {phase === "capturing" ? (
           <Button variant="danger" size="sm" onClick={stop}>
             Stop capture
@@ -421,7 +423,7 @@ export default function LiveMonitor() {
 
       {analysisId && phase === "capturing" && (
         <div style={{ marginTop: 12 }}>
-          <Button variant="outline" size="sm" onClick={() => open(`/live/${analysisId}`, "_self")}>
+          <Button variant="outline" size="sm" onClick={() => open("/", "_self")}>
             Open live analysis document
           </Button>
         </div>

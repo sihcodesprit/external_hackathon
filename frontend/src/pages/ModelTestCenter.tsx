@@ -13,7 +13,7 @@ import { VisualizationBoundary } from "../components/ui/VisualizationBoundary";
 import { AttackGraphView } from "../components/charts/AttackGraphView";
 import { fmtNum } from "../utils/format";
 
-export default function ModelTestCenter() {
+export default function ModelTestCenter({ bare = false }: { bare?: boolean } = {}) {
   const navigate = useNavigate();
   const { data, loading, error, refresh } = useFetch(() => api.testModules(), []);
   const jobsFetcher = useFetch<ModelTestJobSummary[]>(() => api.modelTestJobs(), []);
@@ -48,7 +48,7 @@ export default function ModelTestCenter() {
     setStartError(null);
     try {
       const { job_id } = await api.createModelTestJob();
-      navigate(`/model-test/run/${job_id}`);
+      navigate(`/validate?tab=model-run&job=${job_id}`);
     } catch (e) {
       setStartError(e instanceof Error ? e.message : String(e));
       setStarting(false);
@@ -64,10 +64,14 @@ export default function ModelTestCenter() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Model Test Center</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Test every AI module independently or run the full pipeline against the loaded capture.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Model Test Center</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Test every AI module independently or run the full pipeline against the loaded capture.
+          </p>
+        </>
+      )}
 
       <Card title={"Input"}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -115,7 +119,7 @@ export default function ModelTestCenter() {
             {jobsFetcher.data.slice(0, 8).map((job) => (
               <Link
                 key={job.job_id}
-                to={`/model-test/run/${job.job_id}`}
+                to={`/validate?tab=model-run&job=${job.job_id}`}
                 style={{
                   display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
                   padding: "7px 10px", borderRadius: 8, background: "rgba(16,24,42,0.5)",

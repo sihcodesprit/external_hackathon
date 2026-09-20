@@ -11,7 +11,7 @@ import { ThreatHeader } from "../components/analysis/ThreatHeader";
 import { fmtInt, fmtNum, fmtDateTime } from "../utils/format";
 import { threatGaugeColor } from "../styles/theme";
 
-export default function ReportExport() {
+export default function ReportExport({ bare = false }: { bare?: boolean } = {}) {
   const [params] = useSearchParams();
   const jobId = params.get("job") ?? undefined;
   const { data, loading, error, refresh } = useFetch(() => api.rawReport(jobId), [jobId]);
@@ -32,10 +32,14 @@ export default function ReportExport() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Investigation Report</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Printable structured investigation document assembled from the analysis pipeline.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Investigation Report</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Printable structured investigation document assembled from the analysis pipeline.
+          </p>
+        </>
+      )}
 
       {error && <ErrorState message={error} />}
       {loading && <PageLoader label="Assembling report…" />}

@@ -6,7 +6,7 @@ import { Card, Grid, KeyValue, Tag } from "../components/ui/primitives";
 import type { NetworkStateRow } from "../types";
 import { fmtNum, fmtDateTime } from "../utils/format";
 
-export default function NetworkState() {
+export default function NetworkState({ bare = false }: { bare?: boolean } = {}) {
   const { doc } = useAnalysis();
   const [selectedIdx, setSelectedIdx] = useState<number>(-1);
 
@@ -16,11 +16,15 @@ export default function NetworkState() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Network State</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Windowed network states reconstructed from the capture, grouped into traffic, TCP handshake,
-        entropy, temporal and dynamic-graph feature families.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Network State</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Windowed network states reconstructed from the capture, grouped into traffic, TCP handshake,
+            entropy, temporal and dynamic-graph feature families.
+          </p>
+        </>
+      )}
 
       <RequireAnalysis>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

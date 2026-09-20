@@ -4,17 +4,21 @@ import { RequireAnalysis } from "../components/analysis/RequireAnalysis";
 import { Card } from "../components/ui/primitives";
 import { stageColor } from "../styles/theme";
 
-export default function Mitre() {
+export default function Mitre({ bare = false }: { bare?: boolean } = {}) {
   const { doc } = useAnalysis();
   const traj = doc?.mitre_trajectory ?? [];
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>MITRE Trajectory</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        The predicted attack progression mapped to MITRE ATT&CK tactics and techniques. Mapping is
-        deterministic and only claims a technique when the stage evidence supports it.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>MITRE Trajectory</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            The predicted attack progression mapped to MITRE ATT&CK tactics and techniques. Mapping is
+            deterministic and only claims a technique when the stage evidence supports it.
+          </p>
+        </>
+      )}
 
       <RequireAnalysis>
         {traj.length === 0 ? (

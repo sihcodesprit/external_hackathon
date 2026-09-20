@@ -8,17 +8,21 @@ import { ErrorState, PageLoader } from "../components/ui/displays";
 import { fmtDateTime, fmtInt } from "../utils/format";
 import { threatGaugeColor } from "../styles/theme";
 
-export default function History() {
+export default function History({ bare = false }: { bare?: boolean } = {}) {
   const { data, loading, error, refresh } = useFetch(() => api.history(), []);
   const navigate = useNavigate();
   const entries: HistoryEntry[] = data ?? [];
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Analysis History</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Completed analyses with their threat consensus summary. Click any row to open its report.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Analysis History</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Completed analyses with their threat consensus summary. Click any row to open its report.
+          </p>
+        </>
+      )}
 
       {error && <ErrorState message={error} />}
       {loading && <PageLoader label="Loading history…" />}
@@ -54,7 +58,7 @@ export default function History() {
                     return (
                       <tr
                         key={e.id}
-                        onClick={() => navigate(`/report?job=${e.id}`)}
+                        onClick={() => navigate(`/ops?tab=report&job=${e.id}`)}
                         style={{ cursor: "pointer", borderBottom: `1px solid ${palette.borderSoft}`, transition: "background 120ms" }}
                         onMouseEnter={(ev) => { (ev.currentTarget as HTMLTableRowElement).style.background = "rgba(16,24,42,0.4)"; }}
                         onMouseLeave={(ev) => { (ev.currentTarget as HTMLTableRowElement).style.background = "transparent"; }}

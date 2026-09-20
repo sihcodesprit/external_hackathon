@@ -5,19 +5,23 @@ import { Card } from "../components/ui/primitives";
 import { AttackGraphView } from "../components/charts/AttackGraphView";
 import { VisualizationBoundary } from "../components/ui/VisualizationBoundary";
 
-export default function AttackGraph() {
+export default function AttackGraph({ bare = false }: { bare?: boolean } = {}) {
   const { doc } = useAnalysis();
   const graph = doc?.graph ?? null;
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>
-        Predictive Attack Graph
-      </h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Forecasted progression from the World Model K-step rollout. Timeline mode shows every forecast
-        step; Stage Graph collapses consecutive identical stages.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>
+            Predictive Attack Graph
+          </h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Forecasted progression from the World Model K-step rollout. Timeline mode shows every forecast
+            step; Stage Graph collapses consecutive identical stages.
+          </p>
+        </>
+      )}
 
       <RequireAnalysis>
         <VisualizationBoundary label="PredictiveAttackGraph">

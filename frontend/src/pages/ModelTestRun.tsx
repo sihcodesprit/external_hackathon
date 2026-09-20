@@ -15,8 +15,9 @@ const reduceMotion =
   !!window.matchMedia &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-export default function ModelTestRun() {
-  const { jobId = "" } = useParams<{ jobId: string }>();
+export default function ModelTestRun({ jobId: propJobId = "", bare = false }: { jobId?: string; bare?: boolean } = {}) {
+  const { jobId: paramJobId = "" } = useParams<{ jobId: string }>();
+  const jobId = propJobId || paramJobId;
   const adoptCompletedJob = useAnalysis().adoptCompletedJob;
   const [job, setJob] = useState<ModelTestRunJob | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,14 +117,20 @@ export default function ModelTestRun() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 6 }}>
+        {!bare && (
         <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text }}>
           {running ? "RUNNING MODEL TESTS" : job.status === "error" ? "MODEL TEST FAILED" : "MODEL TEST COMPLETE"}
         </h1>
-        <Link to="/model-test" style={{ fontSize: 12, color: palette.accent }}>← Model Test Center</Link>
+      )}
+      {!bare && (
+        <Link to="/validate?tab=model-test" style={{ fontSize: 12, color: palette.accent }}>← Model Test Center</Link>
+      )}
       </div>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 16 }}>
-        Job <span className="mono">{job.job_id}</span>
-      </p>
+      {!bare && (
+        <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 16 }}>
+          Job <span className="mono">{job.job_id}</span>
+        </p>
+      )}
 
       {error && (
         <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", fontSize: 12, color: palette.danger }}>

@@ -8,7 +8,7 @@ import { Button } from "../components/ui/Button";
 import { ErrorState, PageLoader } from "../components/ui/displays";
 import { fmtInt, fmtBytes, fmtDuration, fmtDateTime } from "../utils/format";
 
-export default function System() {
+export default function System({ bare = false }: { bare?: boolean } = {}) {
   const { data: info, loading: infoLoading, error: infoError } = useFetch(() => api.systemInfo(), []);
   const { data: models, loading: modelsLoading, error: modelsError, refresh } = useFetch(() => api.modelsStatus(), []);
   const { data: deps, loading: depsLoading } = useFetch(() => api.systemDependencies(), []);
@@ -30,10 +30,14 @@ export default function System() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>System Diagnostics</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Runtime environment, model registry, and installed artifacts.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>System Diagnostics</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Runtime environment, model registry, and installed artifacts.
+          </p>
+        </>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <Card title="Runtime" subtitle="Server environment">

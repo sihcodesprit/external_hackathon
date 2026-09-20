@@ -1,26 +1,64 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { palette, motion } from "../../styles/theme";
 
-const nav = [
-  { to: "/", label: "Overview", icon: "◈" },
-  { to: "/analyze", label: "Analyze PCAP", icon: "⤒" },
-  { to: "/live", label: "Live Monitor", icon: "◉" },
-  { to: "/url-monitor", label: "URL Monitor", icon: "⇱" },
-  { to: "/network", label: "Network State", icon: "◉" },
-  { to: "/forecast", label: "Forecast & Projection", icon: "⇉" },
-  { to: "/attack-graph", label: "Attack Graph", icon: "⛨" },
-  { to: "/mitre", label: "MITRE Trajectory", icon: "⛊" },
-  { to: "/explainability", label: "Explainability", icon: "⊕" },
-  { to: "/counterfactual", label: "Counterfactual Lab", icon: "⇋" },
-  { to: "/model-test", label: "Model Test Center", icon: "▦" },
-  { to: "/evaluation", label: "Evaluation", icon: "≈" },
-  { to: "/scenarios", label: "Scenarios", icon: "❖" },
-  { to: "/history", label: "History", icon: "≡" },
-  { to: "/report", label: "Export Report", icon: "⇓" },
-  { to: "/system", label: "System", icon: "⚙" },
+interface NavItem {
+  to: string;
+  label: string;
+  icon: string;
+  default?: string;
+  tabs: Array<{ id: string; label: string }>;
+}
+
+const nav: NavItem[] = [
+  {
+    to: "/",
+    label: "Dashboard",
+    icon: "◈",
+    default: "overview",
+    tabs: [
+      { id: "overview", label: "Overview" },
+      { id: "capture", label: "Capture" },
+    ],
+  },
+  {
+    to: "/analysis",
+    label: "Analysis",
+    icon: "⇉",
+    default: "forecast",
+    tabs: [
+      { id: "network-state", label: "Network State" },
+      { id: "forecast", label: "Forecast" },
+      { id: "attack-graph", label: "Attack Graph" },
+      { id: "mitre", label: "MITRE" },
+      { id: "explainability", label: "Why" },
+    ],
+  },
+  {
+    to: "/validate",
+    label: "Validation",
+    icon: "▦",
+    default: "model-test",
+    tabs: [
+      { id: "model-test", label: "Model Test" },
+      { id: "model-run", label: "Run Detail" },
+      { id: "evaluation", label: "Evaluation" },
+    ],
+  },
+  {
+    to: "/ops",
+    label: "Operations",
+    icon: "⚙",
+    default: "history",
+    tabs: [
+      { id: "history", label: "History" },
+      { id: "report", label: "Report" },
+      { id: "system", label: "System" },
+    ],
+  },
 ];
 
 export function Sidebar() {
+  const location = useLocation();
   return (
     <aside
       style={{
@@ -36,64 +74,63 @@ export function Sidebar() {
         zIndex: 40,
       }}
     >
-      <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${palette.borderSoft}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              display: "grid",
-              placeItems: "center",
-              background: "linear-gradient(135deg, #164e63, #0f766e)",
-              boxShadow: "0 0 18px rgba(34,211,238,0.35)",
-              color: "#e7f7ff",
-              fontSize: 15,
-            }}
-          >
-            ⬡
-          </div>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: palette.text, letterSpacing: 0.3 }}>
-              CYBER WORLD
-            </div>
-            <div style={{ fontSize: 10, color: palette.textMuted, letterSpacing: 1.2, textTransform: "uppercase" }}>
-              Attack Forecasting Engine
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <nav style={{ flex: 1, overflowY: "auto", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
-        {nav.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) => (isActive ? "active" : "")}
-            style={({ isActive }) => ({
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "8px 10px",
-              borderRadius: 8,
-              fontSize: 12.5,
-              color: isActive ? palette.accent : palette.textDim,
-              background: isActive ? palette.accentSoft : "transparent",
-              borderLeft: `2px solid ${isActive ? palette.accent : "transparent"}`,
-              transition: `background ${motion.fast}, color ${motion.fast}`,
-            })}
-          >
-            {({ isActive }) => (
-              <>
+      <nav style={{ flex: 1, overflowY: "auto", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
+        {nav.map((item) => {
+          const isActive =
+            item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to);
+          return (
+            <div key={item.to} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <NavLink
+                to={item.to}
+                end={item.to === "/"}
+                className={({ isActive: a }) => (a ? "active" : "")}
+                style={({ isActive: a }) => ({
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  color: a ? palette.accent : palette.textDim,
+                  background: a ? palette.accentSoft : "transparent",
+                  borderLeft: `2px solid ${a ? palette.accent : "transparent"}`,
+                  transition: `background ${motion.fast}, color ${motion.fast}`,
+                })}
+              >
                 <span style={{ width: 16, textAlign: "center", fontSize: 13, opacity: isActive ? 1 : 0.7 }}>
                   {item.icon}
                 </span>
                 {item.label}
-              </>
-            )}
-          </NavLink>
-        ))}
+              </NavLink>
+              {isActive && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "4px 8px 6px 28px" }}>
+                  {item.tabs.map((t) => {
+                    const tabActive =
+                      new URLSearchParams(location.search).get("tab") === t.id ||
+                      (!location.search.includes("tab=") && t.id === (item.default ?? item.tabs[0].id));
+                    return (
+                      <NavLink
+                        key={t.id}
+                        to={`${item.to}?tab=${t.id}`}
+                        style={{
+                          fontSize: 10.5,
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                          color: tabActive ? palette.accent : palette.textMuted,
+                          background: tabActive ? `${palette.accent}18` : "transparent",
+                          border: `1px solid ${tabActive ? palette.accentBorder : "transparent"}`,
+                          textDecoration: "none",
+                        }}
+                      >
+                        {t.label}
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <div style={{ padding: "12px 16px", borderTop: `1px solid ${palette.borderSoft}`, fontSize: 10, color: palette.textMuted, letterSpacing: 0.4 }}>

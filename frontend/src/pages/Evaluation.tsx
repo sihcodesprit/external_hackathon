@@ -53,7 +53,7 @@ function DictView({ data, depth = 0 }: { data: Record<string, unknown>; depth?: 
   );
 }
 
-export default function Evaluation() {
+export default function Evaluation({ bare = false }: { bare?: boolean } = {}) {
   const { data, loading, error } = useFetch(() => api.rawEvaluation(), []);
 
   if (loading) return <PageLoader label="Running model evaluation…" />;
@@ -63,10 +63,14 @@ export default function Evaluation() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Model Evaluation</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        Training and predictive-metrics evaluation computed from the world model against the loaded capture.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Model Evaluation</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            Training and predictive-metrics evaluation computed from the world model against the loaded capture.
+          </p>
+        </>
+      )}
 
       {Object.keys(evalData).length === 0 ? (
         <Card title="Evaluation">

@@ -405,6 +405,14 @@ export function AttackGraphView({
     model.nodes.every((p) => String(p.stage).toLowerCase().startsWith("benign"));
   const unknownStage =
     !!graph?.unknown_stage || model.nodes.some((p) => String(p.stage).toLowerCase() === "unknown");
+
+  // The scrollable content box must exactly bound the rendered graph so every
+  // part of it (including negative translate offsets from center-zoom) stays
+  // reachable and no phantom scrollable space appears past its edges.
+  const cw = Math.max(model.W * view.s, view.x + model.W * view.s);
+  const ch = Math.max(model.H * view.s, view.y + model.H * view.s);
+  const layerL = -Math.min(0, view.x);
+  const layerT = -Math.min(0, view.y);
   const boxHeight = typeof height === "number" && height > 0 ? `${height}px` : "clamp(500px, 62vh, 760px)";
   const minBoxHeight = typeof height === "number" && height > 0 ? undefined : 500;
 
@@ -511,14 +519,14 @@ export function AttackGraphView({
             border: `1px solid ${palette.borderSoft}`,
           }}
         >
-          <div style={{ width: model.W * view.s, height: model.H * view.s }}>
+          <div style={{ position: "relative", width: cw, height: ch }}>
             <div
               key={laySig}
               className="pagn-layer"
               style={{
                 position: "absolute",
-                left: 0,
-                top: 0,
+                left: layerL,
+                top: layerT,
                 transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
                 transformOrigin: "0 0",
                 width: model.W,

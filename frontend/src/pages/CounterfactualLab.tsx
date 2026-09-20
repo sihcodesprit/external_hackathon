@@ -4,17 +4,21 @@ import { RequireAnalysis } from "../components/analysis/RequireAnalysis";
 import { Card } from "../components/ui/primitives";
 import { CounterfactualPanel } from "../components/counterfactual/CounterfactualPanel";
 
-export default function CounterfactualLab() {
+export default function CounterfactualLab({ bare = false }: { bare?: boolean } = {}) {
   const { doc } = useAnalysis();
   const cf = doc?.counterfactual;
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Counterfactual Defense Lab</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        The world model simulates what happens to near-term risk if the SOC applies each defensive
-        action, then recommends the option with the largest predicted risk reduction.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Counterfactual Defense Lab</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            The world model simulates what happens to near-term risk if the SOC applies each defensive
+            action, then recommends the option with the largest predicted risk reduction.
+          </p>
+        </>
+      )}
 
       <RequireAnalysis>
         {(d) => (

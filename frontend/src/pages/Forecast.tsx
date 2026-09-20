@@ -7,7 +7,7 @@ import { ForecastTimeline } from "../components/charts/ForecastTimeline";
 import { stageColor } from "../styles/theme";
 import { fmtNum } from "../utils/format";
 
-export default function Forecast() {
+export default function Forecast({ bare = false }: { bare?: boolean } = {}) {
   const { doc } = useAnalysis();
   const fc = doc?.forecast;
   const cur = fc?.current;
@@ -15,10 +15,14 @@ export default function Forecast() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Forecast & Projection</h1>
-      <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
-        The LSTM world model projects network risk and attack stage forward over the horizon.
-      </p>
+      {!bare && (
+        <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: palette.text, marginBottom: 6 }}>Forecast & Projection</h1>
+          <p style={{ fontSize: 12.5, color: palette.textMuted, marginBottom: 20 }}>
+            The LSTM world model projects network risk and attack stage forward over the horizon.
+          </p>
+        </>
+      )}
 
       <RequireAnalysis>
         {fc ? (
