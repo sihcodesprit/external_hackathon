@@ -50,8 +50,10 @@ jobs:
   tshark-integration:
     name: TShark Integration Tests
     runs-on: ubuntu-latest
-    # Only run if TSHARK_INTEGRATION_TESTS secret is set or on manual dispatch
-    if: ${{ env.TSHARK_INTEGRATION_TESTS == 'true' || github.event_name == 'workflow_dispatch' }}
+    # The `env` context is not available at job level, so this job runs only
+    # on manual dispatch (workflow_dispatch). Use a repo variable/secret if
+    # automatic triggering is required.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
