@@ -24,6 +24,8 @@ import type {
   UrlStartResponse,
   UrlStatusResponse,
   ZipInspect,
+  AttackStartRequest,
+  LabStatusResponse,
 } from "../types";
 
 const BASE = "";
@@ -220,6 +222,38 @@ export const api = {
       "/api/live/url/stop",
       { method: "POST", body: JSON.stringify({ analysis_id: analysisId }) },
     ),
+
+  // ── Attack Lab API ─────────────────────────────────────────
+  labStatus: () => request<LabStatusResponse>("/api/lab/status"),
+
+  labTargetStart: (cfg?: { port?: number; host?: string }) =>
+    request<{ status: string; pid?: number; port?: number; error?: string }>("/api/lab/target/start", {
+      method: "POST",
+      body: JSON.stringify(cfg ?? {}),
+    }),
+
+  labTargetStop: () =>
+    request<{ status: string; pid?: number; message?: string }>("/api/lab/target/stop", {
+      method: "POST",
+    }),
+
+  labAttackStart: (cfg: AttackStartRequest) =>
+    request<{ status: string; attack_type?: string; target_ip?: string; error?: string }>("/api/lab/attack/start", {
+      method: "POST",
+      body: JSON.stringify(cfg),
+    }),
+
+  labAttackStop: () =>
+    request<{ status: string; attack_type?: string; message?: string }>("/api/lab/attack/stop", {
+      method: "POST",
+    }),
+
+  labLogs: () => request<{ logs: string[] }>("/api/lab/logs"),
+
+  labClear: () =>
+    request<{ status: string; message: string }>("/api/lab/clear", {
+      method: "POST",
+    }),
 
   // ── System / Dependencies ──────────────────────────────────
   systemDependencies: () => request<SystemDependencies>("/api/system/dependencies"),

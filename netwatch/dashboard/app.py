@@ -1380,6 +1380,81 @@ def create_app():
         from netwatch.live.manager import LiveManager
         return jsonify({"sessions": LiveManager().get_history()})
 
+    # ── Attack Lab API ──────────────────────────────────────────
+
+    @app.route("/api/lab/status")
+    def api_lab_status():
+        """Get consolidated Attack Lab topology, target health, active attack status, and logs."""
+        from netwatch.dashboard.lab_manager import LabManager
+        return jsonify(LabManager().get_full_status())
+
+    @app.route("/api/lab/target/start", methods=["POST"])
+    def api_lab_target_start():
+        """Start the Attack Lab target web application."""
+        from netwatch.dashboard.lab_manager import LabManager
+        data = request.get_json(force=True, silent=True) or {}
+        port = int(data.get("port", 8080))
+        host = str(data.get("host", "0.0.0.0"))
+        res = LabManager().start_target_server(port=port, host=host)
+        status_code = 200 if res.get("status") in ("running", "starting", "already_running") else 500
+        return jsonify(res), status_code
+
+    @app.route("/api/lab/target/stop", methods=["POST"])
+    def api_lab_target_stop():
+        """Stop the Attack Lab target web application."""
+        from netwatch.dashboard.lab_manager import LabManager
+        return jsonify(LabManager().stop_target_server())
+
+    @app.route("/api/lab/attack/start", methods=["POST"])
+    @app.route("/api/lab/attack", methods=["POST"])
+    def api_lab_attack_start():
+        """Launch a simulated attack against the target web application."""
+        from netwatch.dashboard.lab_manager import LabManager
+        data = request.get_json(force=True, silent=True) or {}
+        attack_type = data.get("attack") or data.get("attack_type") or "recon"
+        target_ip = data.get("target_ip")
+        duration = int(data.get("duration", 15))
+        intensity = str(data.get("intensity", "medium"))
+
+        res = LabManager().start_attack(
+            attack_type=attack_type,
+            target_ip=target_ip,
+            duration=duration,
+            intensity=intensity,
+        )
+        status_code = 200 if res.get("status") == "started" else 400
+        return jsonify(res), status_code
+
+    @app.route("/api/lab/attack/stop", methods=["POST"])
+    def api_lab_attack_stop():
+        """Stop active attack simulation."""
+        from netwatch.dashboard.lab_manager import LabManager
+        return jsonify(LabManager().stop_attack())
+
+    @app.route("/api/lab/events")
+    def api_lab_events():
+        """Return history of executed attacks."""
+        from netwatch.dashboard.lab_manager import LabManager
+        status = LabManager().get_full_status()
+        return jsonify({
+            "events": status.get("recent_events", []),
+            "active_attack": status.get("active_attack"),
+        })
+
+    @app.route("/api/lab/logs")
+    def api_lab_logs():
+        """Return streaming logs from the Attack Lab."""
+        from netwatch.dashboard.lab_manager import LabManager
+        status = LabManager().get_full_status()
+        return jsonify({"logs": status.get("logs", [])})
+
+    @app.route("/api/lab/clear", methods=["POST"])
+    @app.route("/api/lab/reset", methods=["POST"])
+    def api_lab_clear():
+        """Clear console logs and reset target stats."""
+        from netwatch.dashboard.lab_manager import LabManager
+        return jsonify(LabManager().clear_logs_and_stats())
+
     # ── Serve React frontend (SPA + real static assets) ───────
     static_dir = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
     static_path = Path(static_dir)

@@ -839,3 +839,52 @@ export interface UrlStatusResponse {
   ensemble?: EnsembleResult | null;
   world_model_status?: string;
 }
+
+// ── Attack Lab Types ───────────────────────────────────────
+
+export interface LabTopology {
+  netns_available: boolean;
+  netns_name: string | null;
+  veth_interface: string | null;
+  has_veth: boolean;
+  suggested_interface: string;
+  attacker_ip: string;
+  target_ip: string;
+  target_port: number;
+  target_running: boolean;
+  target_stats?: Record<string, unknown> | null;
+  has_nmap: boolean;
+  has_hping3: boolean;
+  has_hydra: boolean;
+}
+
+export interface ActiveAttackInfo {
+  running: boolean;
+  type: string;
+  started_at: string;
+  packets_sent: number;
+}
+
+export interface AttackEvent {
+  id: number;
+  timestamp: string;
+  attack_type: string;
+  target: string;
+  duration: number;
+  packets_sent: number;
+  status: string;
+}
+
+export interface LabStatusResponse {
+  topology: LabTopology;
+  active_attack: ActiveAttackInfo | null;
+  recent_events: AttackEvent[];
+  logs: string[];
+}
+
+export interface AttackStartRequest {
+  attack: "recon" | "bruteforce" | "dos" | "exfiltration" | string;
+  target_ip?: string;
+  duration?: number;
+  intensity?: "low" | "medium" | "high";
+}

@@ -17,6 +17,7 @@ const nav: NavItem[] = [
     default: "overview",
     tabs: [
       { id: "overview", label: "Overview" },
+      { id: "lab", label: "Attack Lab" },
       { id: "capture", label: "Capture" },
     ],
   },
