@@ -101,7 +101,6 @@ class TSharkSensor:
             logger.warning("TShark already running — stopping first")
             self.stop()
 
-        iface = _validate_interface(interface)
         fmt = output_format or TSHARK_OUTPUT_FORMAT
         bf = bpf_filter or TSHARK_BPF_FILTER
         snaplen = str(TSHARK_SNAPLEN)
@@ -117,6 +116,7 @@ class TSharkSensor:
             return False
 
         try:
+            iface = _validate_interface(interface)
             cmd = build_live_capture_command(
                 executable=exe,
                 interface=iface,

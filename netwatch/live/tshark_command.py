@@ -15,8 +15,17 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Safe interface name validation: only alphanumeric, hyphens, underscores, dots.
-_VALID_IFACE_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
+# Interface name validation is an allowlist of printable characters.
+# Linux names are word chars (`-`, `_`, `.`), but Windows adapter names are
+# free-form and commonly include spaces and parentheses, e.g.
+# `vEthernet (WSL (Hyper-V firewall))`, or NPF device paths like
+# `\Device\NPF_{GUID}`. Control characters and shell metacharacters are
+# rejected so a name can never become shell syntax (defense-in-depth; the
+# subprocess always runs with `shell=False`).
+_VALID_IFACE_CHARS = (
+    set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
+    | set(" (){}[]\\*+=~#@^,")
+)
 
 
 def _validate_interface(iface: str) -> str:

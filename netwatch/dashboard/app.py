@@ -1277,11 +1277,17 @@ def create_app():
             return jsonify({"error": "Invalid window_size / step_size / forecast_horizon"}), 400
 
         mgr = LiveManager()
-        result = mgr.start_url(
-            url=url, interface=interface, window_size=window_size,
-            step_size=step_size, forecast_horizon=forecast_horizon,
-            allow_private_hosts=bool(LIVE_URL_ALLOW_PRIVATE_HOSTS),
-        )
+        try:
+            result = mgr.start_url(
+                url=url, interface=interface, window_size=window_size,
+                step_size=step_size, forecast_horizon=forecast_horizon,
+                allow_private_hosts=bool(LIVE_URL_ALLOW_PRIVATE_HOSTS),
+            )
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            logger.exception("Live URL monitor start failed")
+            return jsonify({"error": f"Internal error: {e}"}), 500
         if "error" in result:
             return jsonify(result), 400
         return jsonify(result)
