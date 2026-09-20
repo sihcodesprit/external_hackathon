@@ -1174,23 +1174,42 @@ def create_app():
             LIVE_DEFAULT_INTERFACE, LIVE_WINDOW_SIZE,
             LIVE_STEP_SIZE, LIVE_FORECAST_HORIZON,
         )
+        from netwatch.live.interface import discover_interfaces
         data = {}
         try:
             data = request.get_json(force=True) or {}
         except Exception:
             data = {}
         interface = data.get("interface") or LIVE_DEFAULT_INTERFACE
-        window_size = int(data.get("window_size", LIVE_WINDOW_SIZE))
-        step_size = int(data.get("step_size", LIVE_STEP_SIZE))
-        forecast_horizon = int(data.get("forecast_horizon", LIVE_FORECAST_HORIZON))
+        if not interface:
+            available = discover_interfaces()
+            return jsonify({
+                "error": "Interface is required",
+                "available_interfaces": [
+                    {"name": i.get("name"), "description": i.get("description", "")}
+                    for i in available
+                ]
+            }), 400
+        try:
+            window_size = int(data.get("window_size", LIVE_WINDOW_SIZE))
+            step_size = int(data.get("step_size", LIVE_STEP_SIZE))
+            forecast_horizon = int(data.get("forecast_horizon", LIVE_FORECAST_HORIZON))
+        except (TypeError, ValueError) as e:
+            return jsonify({"error": f"Invalid parameters: {e}"}), 400
 
         mgr = LiveManager()
-        result = mgr.start(
-            interface=interface,
-            window_size=window_size,
-            step_size=step_size,
-            forecast_horizon=forecast_horizon,
-        )
+        try:
+            result = mgr.start(
+                interface=interface,
+                window_size=window_size,
+                step_size=step_size,
+                forecast_horizon=forecast_horizon,
+            )
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            logger.exception("Live start failed")
+            return jsonify({"error": f"Internal error: {e}"}), 500
         status_code = 200 if "error" not in result else 400
         return jsonify(result), status_code
 
