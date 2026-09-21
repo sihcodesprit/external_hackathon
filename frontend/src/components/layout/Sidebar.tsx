@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { palette, motion } from "../../styles/theme";
 
@@ -58,12 +59,33 @@ const nav: NavItem[] = [
   },
 ];
 
+const isTabActive = (
+  location: ReturnType<typeof useLocation>,
+  item: NavItem,
+  id: string,
+): boolean => {
+  const ts = new URLSearchParams(location.search).get("tab");
+  return (ts ?? item.default ?? item.tabs[0].id) === id;
+};
+
 export function Sidebar() {
   const location = useLocation();
+  const active =
+    nav.find((item) =>
+      item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to),
+    )?.to ?? nav[0].to;
+  const [openTo, setOpenTo] = useState<string | null>(active);
+
+  useEffect(() => {
+    setOpenTo(active);
+  }, [active]);
+
+  const toggle = (to: string) => setOpenTo((prev) => (prev === to ? null : to));
+
   return (
     <aside
       style={{
-        width: 218,
+        width: 224,
         flexShrink: 0,
         height: "100dvh",
         position: "sticky",
@@ -75,54 +97,133 @@ export function Sidebar() {
         zIndex: 40,
       }}
     >
-      <nav style={{ flex: 1, overflowY: "auto", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
+      <div
+        style={{
+          padding: "14px 16px 12px",
+          borderBottom: `1px solid ${palette.borderSoft}`,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            style={{
+              width: 26,
+              height: 26,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 7,
+              fontSize: 15,
+              background: `${palette.accent}1a`,
+              color: palette.accent,
+              border: `1px solid ${palette.accentBorder}`,
+            }}
+          >
+            ◈
+          </span>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3, color: palette.text, lineHeight: 1.2 }}>
+              NetWatch
+            </div>
+            <div style={{ fontSize: 8.5, letterSpacing: 1.1, color: palette.textMuted, marginTop: 2 }}>
+              CYBER WORLD MODEL
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <nav
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          overflowX: "hidden",
+          padding: "10px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
         {nav.map((item) => {
-          const isActive =
-            item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to);
+          const isActive = item.to === active;
+          const isOpen = openTo === item.to;
           return (
-            <div key={item.to} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <div
+              key={item.to}
+              style={{
+                borderRadius: 9,
+                background: isActive ? `${palette.accentSoft}0d` : "transparent",
+                border: `1px solid ${isActive ? "rgba(34,211,238,0.28)" : "transparent"}`,
+                overflow: "hidden",
+              }}
+            >
               <NavLink
                 to={item.to}
                 end={item.to === "/"}
-                className={({ isActive: a }) => (a ? "active" : "")}
+                onClick={() => toggle(item.to)}
                 style={({ isActive: a }) => ({
                   display: "flex",
                   alignItems: "center",
-                  gap: 10,
-                  padding: "8px 10px",
-                  borderRadius: 8,
+                  gap: 9,
+                  padding: "8px 11px",
                   fontSize: 12.5,
-                  color: a ? palette.accent : palette.textDim,
-                  background: a ? palette.accentSoft : "transparent",
-                  borderLeft: `2px solid ${a ? palette.accent : "transparent"}`,
-                  transition: `background ${motion.fast}, color ${motion.fast}`,
+                  fontWeight: a ? 700 : 550,
+                  color: a ? palette.text : palette.textDim,
+                  textDecoration: "none",
+                  transition: `color ${motion.fast}`,
                 })}
               >
                 <span style={{ width: 16, textAlign: "center", fontSize: 13, opacity: isActive ? 1 : 0.7 }}>
                   {item.icon}
                 </span>
                 {item.label}
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: 8.5,
+                    fontWeight: 600,
+                    opacity: 1,
+                    color: isActive ? palette.accent : palette.textMuted,
+                    transition: "transform 120ms ease",
+                    transform: isOpen ? "rotate(90deg)" : "none",
+                  }}
+                >
+                  ▸
+                </span>
               </NavLink>
-              {isActive && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "4px 8px 6px 28px" }}>
+
+              {isOpen && (
+                <div
+                  className="nav-sub-list"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 1,
+                    padding: "0 6px 7px",
+                    borderTop: `1px solid ${isActive ? "rgba(34,211,238,0.12)" : palette.borderSoft}`,
+                    marginTop: 2,
+                    paddingTop: 6,
+                  }}
+                >
                   {item.tabs.map((t) => {
-                    const tabActive =
-                      new URLSearchParams(location.search).get("tab") === t.id ||
-                      (!location.search.includes("tab=") && t.id === (item.default ?? item.tabs[0].id));
+                    const tabActive = isTabActive(location, item, t.id);
                     return (
                       <NavLink
                         key={t.id}
                         to={`${item.to}?tab=${t.id}`}
-                        style={{
-                          fontSize: 10.5,
-                          padding: "2px 8px",
+                        className="nav-sub-link"
+                        style={() => ({
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 7,
+                          padding: "5px 8px 5px 12px",
                           borderRadius: 6,
+                          fontSize: 11.5,
                           color: tabActive ? palette.accent : palette.textMuted,
-                          background: tabActive ? `${palette.accent}18` : "transparent",
-                          border: `1px solid ${tabActive ? palette.accentBorder : "transparent"}`,
-                          textDecoration: "none",
-                        }}
+                          background: tabActive ? `${palette.accent}14` : "transparent",
+                          borderLeft: `2px solid ${tabActive ? palette.accent : "transparent"}`,
+                          transition: `background ${motion.fast}, color ${motion.fast}`,
+                        })}
                       >
+                        <span style={{ fontSize: 8, opacity: tabActive ? 1 : 0.5 }}>●</span>
                         {t.label}
                       </NavLink>
                     );
@@ -134,7 +235,19 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div style={{ padding: "12px 16px", borderTop: `1px solid ${palette.borderSoft}`, fontSize: 10, color: palette.textMuted, letterSpacing: 0.4 }}>
+      <div
+        style={{
+          padding: "10px 16px",
+          borderTop: `1px solid ${palette.borderSoft}`,
+          fontSize: 9.5,
+          color: palette.textMuted,
+          letterSpacing: 0.4,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: palette.good }} />
         NetWatch · LSTM World Model
       </div>
     </aside>

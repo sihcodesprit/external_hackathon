@@ -76,6 +76,28 @@ kbd {
   font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
 }
 
+.nav-sub-link {
+  text-decoration: none;
+}
+.nav-sub-link:hover {
+  background: rgba(34, 211, 238, 0.08);
+  color: #dbe4ff;
+}
+
+.nav-sub-list {
+  animation: nav-sub-open 130ms ease;
+}
+@keyframes nav-sub-open {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .text-dim {
   color: #8b98c2;
 }

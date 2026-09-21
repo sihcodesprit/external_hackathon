@@ -72,7 +72,7 @@ class LabManager:
 
         self._log_buffer = deque(maxlen=300)
         self._events_history = []
-        self._state_lock = threading.Lock()
+        self._state_lock = threading.RLock()
 
         # Add initial greeting log
         self._append_log("Attack Lab Controller initialized.")
