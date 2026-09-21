@@ -78,24 +78,59 @@ def flags_to_string(flags) -> str:
         return ""
 
 
+def _to_int(value, default: int = 0) -> int:
+    """Coerce a CSV/JSON value to int; anything unparsable degrades to default."""
+    if value is None or isinstance(value, bool):
+        return default if value is None else int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    s = str(value).strip()
+    if not s:
+        return default
+    try:
+        return int(float(s))
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(value, default: float = 0.0) -> float:
+    """Coerce a CSV/JSON value to float; anything unparsable degrades to default."""
+    if value is None or isinstance(value, bool):
+        return default if value is None else float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().replace(",", "")
+    if not s:
+        return default
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return default
+
+
 def normalize_packet_dict(d: Dict) -> Optional[PacketRecord]:
-    """Convert an arbitrary dict into a normalized PacketRecord."""
+    """Convert an arbitrary dict into a normalized PacketRecord.
+
+    Best-effort: rows with missing or non-numeric fields are still kept with
+    safe defaults instead of being dropped, so a flow CSV with one odd column
+    can never silently empty the whole capture.
+    """
     try:
         return PacketRecord(
             timestamp=str(d.get("timestamp", "")),
             src_ip=str(d.get("src_ip", "") or d.get("src", "")),
             dst_ip=str(d.get("dst_ip", "") or d.get("dst", "")),
-            src_port=int(d.get("src_port", 0) or 0),
-            dst_port=int(d.get("dst_port", 0) or 0),
+            src_port=_to_int(d.get("src_port", 0)),
+            dst_port=_to_int(d.get("dst_port", 0)),
             protocol=str(d.get("protocol", "TCP") or "TCP").upper(),
             flags=flags_to_string(d.get("flags")),
-            bytes_sent=int(d.get("bytes", d.get("bytes_sent", 0)) or 0),
-            packets=int(d.get("packets", 1) or 1),
-            ttl=int(d.get("ttl", 0) or 0),
-            payload_size=int(d.get("payload_size", 0) or 0),
-            tcp_window=int(d.get("tcp_window", d.get("tcp_window_size", 0)) or 0),
-            duration=float(d.get("duration", d.get("flow_duration", 0.0)) or 0.0),
-            label=int(d.get("label", 0) or 0),
+            bytes_sent=_to_int(d.get("bytes", d.get("bytes_sent", 0))),
+            packets=_to_int(d.get("packets", 1), default=1),
+            ttl=_to_int(d.get("ttl", 0)),
+            payload_size=_to_int(d.get("payload_size", 0)),
+            tcp_window=_to_int(d.get("tcp_window", d.get("tcp_window_size", 0))),
+            duration=_to_float(d.get("duration", d.get("flow_duration", 0.0))),
+            label=_to_int(d.get("label", 0)),
             stage=str(d.get("stage", "") or ""),
         )
     except Exception as e:
@@ -191,17 +226,57 @@ def load_pcap(path: Path, display_name: str | None = None) -> List[PacketRecord]
     return records
 
 
-def load_flow_csv(path: Path) -> List[PacketRecord]:
-    """Load flow records from a CSV (best-effort column mapping)."""
-    import csv
+def _decode_csv_text(path: Path) -> str:
+    """Decode CSV bytes trying the encodings real-world exports use."""
+    raw = Path(path).read_bytes()
+    for enc in ("utf-8-sig", "utf-16", "utf-16-le"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
 
+
+def _sniff_delimiter(text: str) -> str:
+    """Pick the delimiter from the first non-empty data line."""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if "\t" in line and "," not in line and ";" not in line:
+            return "\t"
+        if ";" in line and "," not in line:
+            return ";"
+        return ","
+    return ","
+
+
+def load_flow_csv(path: Path) -> List[PacketRecord]:
+    """Load flow records from a CSV (best-effort column mapping).
+
+    Tolerates Excel exports: UTF-8 BOM / UTF-16 encodings, comma / semicolon /
+    tab delimiters, whitespace in header names, blank rows, and non-numeric
+    values in numeric columns.
+    """
+    import csv
+    import io
+
+    text = _decode_csv_text(path)
+    delimiter = _sniff_delimiter(text)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     records: List[PacketRecord] = []
-    with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rec = normalize_packet_dict(row)
-            if rec is not None:
-                records.append(rec)
+    for row in reader:
+        if row is None:
+            continue
+        clean = {
+            (k or "").strip(): "" if v is None else v.strip()
+            for k, v in row.items()
+        }
+        if not any(clean.values()):
+            continue
+        rec = normalize_packet_dict(clean)
+        if rec is not None:
+            records.append(rec)
     return records
 
 
