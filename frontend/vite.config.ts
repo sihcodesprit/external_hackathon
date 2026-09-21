@@ -9,7 +9,7 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: false,
     cssCodeSplit: true,
-    minify: "esbuild",
+    minify: "oxc",
     reportCompressedSize: false,
     chunkSizeWarningLimit: 1100,
     rollupOptions: {
@@ -17,8 +17,10 @@ export default defineConfig({
         entryFileNames: "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-router-dom"],
+        manualChunks(id) {
+          if (/[\\/]node_modules[\\/](react|react-dom|react-router-dom)[\\/]/.test(id)) {
+            return "vendor";
+          }
         },
       },
     },
